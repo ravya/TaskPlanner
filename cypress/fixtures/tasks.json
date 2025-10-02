@@ -1,0 +1,327 @@
+{
+  "sampleTasks": [
+    {
+      "title": "Complete project proposal",
+      "description": "Draft and finalize the project proposal for Q4 initiative",
+      "status": "todo",
+      "priority": "high",
+      "category": "Planning",
+      "project": "Website Redesign",
+      "tags": ["urgent", "planning", "documentation"],
+      "estimatedHours": 8
+    },
+    {
+      "title": "Fix login bug",
+      "description": "Users are unable to login with Google OAuth",
+      "status": "in_progress", 
+      "priority": "urgent",
+      "category": "Development",
+      "tags": ["bug", "frontend", "authentication"],
+      "estimatedHours": 4,
+      "actualHours": 2
+    },
+    {
+      "title": "Update user documentation",
+      "description": "Refresh the user guide with new features",
+      "status": "completed",
+      "priority": "medium",
+      "category": "Documentation",
+      "tags": ["documentation", "user-guide"],
+      "estimatedHours": 6,
+      "actualHours": 5
+    },
+    {
+      "title": "Database migration",
+      "description": "Migrate user data to new schema",
+      "status": "archived",
+      "priority": "medium",
+      "category": "Development",
+      "project": "Infrastructure Upgrade",
+      "tags": ["database", "migration", "backend"],
+      "estimatedHours": 16,
+      "actualHours": 20
+    },
+    {
+      "title": "Team meeting preparation",
+      "description": "Prepare agenda and materials for weekly team meeting",
+      "status": "todo",
+      "priority": "low",
+      "category": "Meeting",
+      "tags": ["meeting", "planning"],
+      "estimatedHours": 1
+    }
+  ],
+  "tasksByStatus": {
+    "todo": [
+      {
+        "title": "Review code changes",
+        "description": "Review pull requests from team members",
+        "priority": "medium",
+        "category": "Development",
+        "tags": ["review", "code"]
+      },
+      {
+        "title": "Schedule client call",
+        "description": "Arrange meeting with client for feedback session",
+        "priority": "high",
+        "category": "Meeting",
+        "tags": ["client", "meeting"]
+      },
+      {
+        "title": "Update project timeline",
+        "description": "Adjust project milestones based on recent progress",
+        "priority": "low",
+        "category": "Planning",
+        "tags": ["planning", "timeline"]
+      }
+    ],
+    "in_progress": [
+      {
+        "title": "Implement new feature",
+        "description": "Add task filtering and sorting capabilities",
+        "priority": "high",
+        "category": "Development", 
+        "tags": ["feature", "frontend"],
+        "estimatedHours": 12,
+        "actualHours": 6
+      },
+      {
+        "title": "Design mockups",
+        "description": "Create UI mockups for mobile app",
+        "priority": "medium",
+        "category": "Design",
+        "tags": ["design", "mobile"],
+        "estimatedHours": 8,
+        "actualHours": 4
+      }
+    ],
+    "completed": [
+      {
+        "title": "Setup CI/CD pipeline",
+        "description": "Configure automated deployment process",
+        "priority": "high",
+        "category": "Development",
+        "tags": ["deployment", "automation"],
+        "estimatedHours": 16,
+        "actualHours": 14
+      },
+      {
+        "title": "User research interviews",
+        "description": "Conduct interviews with 10 users",
+        "priority": "medium", 
+        "category": "Research",
+        "tags": ["research", "user-experience"],
+        "estimatedHours": 20,
+        "actualHours": 18
+      }
+    ],
+    "archived": [
+      {
+        "title": "Legacy system migration",
+        "description": "Migrate data from old system - CANCELLED",
+        "priority": "low",
+        "category": "Development",
+        "tags": ["migration", "legacy"],
+        "estimatedHours": 40,
+        "actualHours": 10
+      }
+    ]
+  },
+  "tasksByPriority": {
+    "urgent": [
+      {
+        "title": "Production server down",
+        "description": "Critical server outage affecting all users",
+        "status": "todo",
+        "category": "Operations",
+        "tags": ["urgent", "production", "server"]
+      },
+      {
+        "title": "Security vulnerability fix",
+        "description": "Patch critical security issue in authentication",
+        "status": "in_progress", 
+        "category": "Security",
+        "tags": ["security", "bug", "authentication"]
+      }
+    ],
+    "high": [
+      {
+        "title": "Launch marketing campaign",
+        "description": "Deploy Q4 marketing campaign across all channels",
+        "status": "todo",
+        "category": "Marketing",
+        "tags": ["marketing", "campaign", "launch"]
+      },
+      {
+        "title": "Customer feedback analysis",
+        "description": "Analyze and summarize recent customer feedback",
+        "status": "in_progress",
+        "category": "Research", 
+        "tags": ["feedback", "analysis", "customer"]
+      }
+    ],
+    "medium": [
+      {
+        "title": "Update API documentation",
+        "description": "Refresh API docs with latest endpoints",
+        "status": "todo",
+        "category": "Documentation",
+        "tags": ["documentation", "api"]
+      },
+      {
+        "title": "Performance optimization",
+        "description": "Improve application loading times",
+        "status": "completed",
+        "category": "Development",
+        "tags": ["performance", "optimization"]
+      }
+    ],
+    "low": [
+      {
+        "title": "Organize team lunch",
+        "description": "Plan team building lunch event",
+        "status": "todo",
+        "category": "HR",
+        "tags": ["team", "event", "social"]
+      },
+      {
+        "title": "Clean up old files",
+        "description": "Remove outdated files from shared drive",
+        "status": "completed",
+        "category": "Admin",
+        "tags": ["cleanup", "maintenance"]
+      }
+    ]
+  },
+  "specialTasks": {
+    "overdue": [
+      {
+        "title": "Overdue report submission",
+        "description": "Monthly report was due last week",
+        "status": "todo",
+        "priority": "high",
+        "category": "Reporting",
+        "dueDate": "2023-01-15T10:00:00.000Z",
+        "tags": ["overdue", "report"]
+      }
+    ],
+    "upcoming": [
+      {
+        "title": "Upcoming deadline task",
+        "description": "Task due in 3 days",
+        "status": "in_progress",
+        "priority": "medium", 
+        "category": "Development",
+        "dueDate": "2024-12-31T17:00:00.000Z",
+        "tags": ["deadline", "development"]
+      }
+    ],
+    "recurring": [
+      {
+        "title": "Weekly status update",
+        "description": "Send weekly progress report to stakeholders",
+        "status": "completed",
+        "priority": "medium",
+        "category": "Communication",
+        "tags": ["weekly", "status", "recurring"],
+        "recurring": {
+          "type": "weekly",
+          "interval": 1
+        }
+      }
+    ],
+    "longTasks": [
+      {
+        "title": "This is a very long task title that exceeds normal length limits to test how the UI handles long text content",
+        "description": "This is an extremely long description that contains multiple paragraphs and detailed information about the task. It includes various requirements, specifications, and notes that a real-world task might contain. This should test how the application handles lengthy text content in task descriptions and ensures proper text wrapping and display. The description continues with additional details about implementation requirements, testing procedures, and acceptance criteria that need to be met before the task can be considered complete.",
+        "status": "todo",
+        "priority": "low",
+        "category": "Testing",
+        "tags": ["long-content", "ui-testing", "text-handling", "edge-case"]
+      }
+    ]
+  },
+  "testScenarios": {
+    "emptyList": [],
+    "singleTask": [
+      {
+        "title": "Single task for testing",
+        "description": "This is the only task in the list",
+        "status": "todo",
+        "priority": "medium",
+        "category": "Testing",
+        "tags": ["single", "test"]
+      }
+    ],
+    "bulkOperations": [
+      {
+        "title": "Bulk task 1",
+        "status": "todo",
+        "priority": "low",
+        "category": "Testing",
+        "tags": ["bulk", "test"]
+      },
+      {
+        "title": "Bulk task 2", 
+        "status": "todo",
+        "priority": "low",
+        "category": "Testing",
+        "tags": ["bulk", "test"]
+      },
+      {
+        "title": "Bulk task 3",
+        "status": "todo",
+        "priority": "low", 
+        "category": "Testing",
+        "tags": ["bulk", "test"]
+      },
+      {
+        "title": "Bulk task 4",
+        "status": "todo",
+        "priority": "low",
+        "category": "Testing",
+        "tags": ["bulk", "test"]
+      },
+      {
+        "title": "Bulk task 5",
+        "status": "todo",
+        "priority": "low",
+        "category": "Testing", 
+        "tags": ["bulk", "test"]
+      }
+    ]
+  },
+  "filterTestData": {
+    "byCategory": {
+      "Development": 5,
+      "Design": 3,
+      "Marketing": 2,
+      "Testing": 4,
+      "Documentation": 2
+    },
+    "byStatus": {
+      "todo": 8,
+      "in_progress": 4,
+      "completed": 6,
+      "archived": 2
+    },
+    "byPriority": {
+      "urgent": 2,
+      "high": 4,
+      "medium": 8, 
+      "low": 6
+    },
+    "commonTags": [
+      "development",
+      "bug",
+      "feature",
+      "testing",
+      "documentation",
+      "urgent",
+      "review",
+      "meeting",
+      "planning",
+      "design"
+    ]
+  }
+}

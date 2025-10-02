@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidUser(userData) {
+      return userData.keys().hasAll(['userId', 'email', 'displayName', 'createdAt']) &&
+             userData.userId == request.auth.uid &&
+             userData.email == request.auth.token.email;
+    }
+    
+    function isValidTask(taskData) {
+      return taskData.keys().hasAll(['taskId', 'title', 'userId', 'createdAt']) &&
+             taskData.userId == request.auth.uid &&
+             taskData.title is string &&
+             taskData.title.size() > 0 &&
+             taskData.title.size() <= 200;
+    }
+    
+    function isValidTag(tagData) {
+      return tagData.keys().hasAll(['tagId', 'name', 'displayName', 'userId', 'createdAt']) &&
+             tagData.userId == request.auth.uid &&
+             tagData.name is string &&
+             tagData.name.size() > 0 &&
+             tagData.name.size() <= 30;
+    }
+    
+    // User documents - users can only access their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      
+      allow create: if isOwner(userId) && 
+                       isValidUser(request.resource.data);
+                       
+      allow update: if isOwner(userId) && 
+                       request.resource.data.userId == userId &&
+                       request.resource.data.email == resource.data.email; // email cannot be changed
+      
+      // User's task subcollection
+      match /tasks/{taskId} {
+        allow read, write: if isOwner(userId);
+        
+        allow create: if isOwner(userId) && 
+                         isValidTask(request.resource.data);
+                         
+        allow update: if isOwner(userId) && 
+                         request.resource.data.userId == userId &&
+                         request.resource.data.taskId == resource.data.taskId; // taskId cannot be changed
+        
+        allow delete: if isOwner(userId);
+      }
+      
+      // User's tag subcollection  
+      match /tags/{tagId} {
+        allow read, write: if isOwner(userId);
+        
+        allow create: if isOwner(userId) && 
+                         isValidTag(request.resource.data);
+                         
+        allow update: if isOwner(userId) && 
+                         request.resource.data.userId == userId &&
+                         request.resource.data.tagId == resource.data.tagId; // tagId cannot be changed
+        
+        allow delete: if isOwner(userId);
+      }
+      
+      // User's notification subcollection
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+        
+        allow create: if isOwner(userId) && 
+                         request.resource.data.userId == userId;
+                         
+        allow update: if isOwner(userId) && 
+                         request.resource.data.userId == userId;
+        
+        allow delete: if isOwner(userId);
+      }
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

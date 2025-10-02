@@ -1,0 +1,67 @@
+{
+  "name": "@taskflow/client-sdk",
+  "version": "1.0.0",
+  "description": "TaskFlow Client SDK for frontend applications",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "taskflow",
+    "firebase",
+    "task-management",
+    "client-sdk",
+    "offline-sync"
+  ],
+  "author": "TaskFlow Team",
+  "license": "MIT",
+  "dependencies": {
+    "eventemitter3": "^5.0.1",
+    "firebase": "^9.0.0 || ^10.0.0",
+    "idb": "^7.1.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "firebase": "^9.0.0 || ^10.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/taskflow/backend.git",
+    "directory": "client-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/taskflow/backend/issues"
+  },
+  "homepage": "https://taskflow.dev",
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts"
+    ]
+  }
+}

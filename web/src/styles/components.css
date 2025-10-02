@@ -1,0 +1,284 @@
+/* Component-specific styles */
+
+/* Button component styles */
+.btn-primary {
+  @apply btn-base bg-primary-600 text-white;
+  @apply hover:bg-primary-700 focus:ring-primary-500;
+  @apply shadow-sm hover:shadow-md;
+}
+
+.btn-secondary {
+  @apply btn-base bg-gray-200 text-gray-900;
+  @apply hover:bg-gray-300 focus:ring-gray-500;
+}
+
+.btn-success {
+  @apply btn-base bg-success-600 text-white;
+  @apply hover:bg-success-700 focus:ring-success-500;
+}
+
+.btn-warning {
+  @apply btn-base bg-warning-600 text-white;
+  @apply hover:bg-warning-700 focus:ring-warning-500;
+}
+
+.btn-danger {
+  @apply btn-base bg-danger-600 text-white;
+  @apply hover:bg-danger-700 focus:ring-danger-500;
+}
+
+.btn-ghost {
+  @apply btn-base bg-transparent text-gray-700;
+  @apply hover:bg-gray-100 focus:ring-gray-500;
+}
+
+.btn-outline {
+  @apply btn-base bg-transparent border border-gray-300 text-gray-700;
+  @apply hover:bg-gray-50 focus:ring-gray-500;
+}
+
+/* Button sizes */
+.btn-xs {
+  @apply px-2 py-1 text-xs rounded-md;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-sm rounded-md;
+}
+
+.btn-md {
+  @apply px-4 py-2 text-sm rounded-lg;
+}
+
+.btn-lg {
+  @apply px-6 py-3 text-base rounded-lg;
+}
+
+.btn-xl {
+  @apply px-8 py-4 text-lg rounded-xl;
+}
+
+/* Modal component styles */
+.modal-backdrop {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50;
+}
+
+.modal-container {
+  @apply fixed inset-0 z-50 overflow-y-auto;
+  @apply flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0;
+}
+
+.modal-content {
+  @apply relative transform overflow-hidden rounded-lg bg-white text-left shadow-strong;
+  @apply transition-all sm:my-8 sm:w-full sm:max-w-lg;
+}
+
+/* Input component styles */
+.input-group {
+  @apply relative;
+}
+
+.input-group .form-input {
+  @apply pr-10;
+}
+
+.input-group .input-icon {
+  @apply absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400;
+}
+
+.input-error .form-input {
+  @apply border-danger-300 focus:ring-danger-500;
+}
+
+.input-success .form-input {
+  @apply border-success-300 focus:ring-success-500;
+}
+
+/* Dropdown component styles */
+.dropdown-menu {
+  @apply absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg;
+  @apply ring-1 ring-black ring-opacity-5 focus:outline-none;
+}
+
+.dropdown-item {
+  @apply block px-4 py-2 text-sm text-gray-700 cursor-pointer;
+  @apply hover:bg-gray-100 hover:text-gray-900;
+}
+
+.dropdown-item.active {
+  @apply bg-primary-100 text-primary-900;
+}
+
+.dropdown-item:disabled {
+  @apply text-gray-400 cursor-not-allowed;
+  @apply hover:bg-transparent hover:text-gray-400;
+}
+
+/* Badge component styles */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-primary {
+  @apply bg-primary-100 text-primary-800;
+}
+
+.badge-success {
+  @apply bg-success-100 text-success-800;
+}
+
+.badge-warning {
+  @apply bg-warning-100 text-warning-800;
+}
+
+.badge-danger {
+  @apply bg-danger-100 text-danger-800;
+}
+
+.badge-gray {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* Progress component styles */
+.progress-bar {
+  @apply w-full bg-gray-200 rounded-full h-2;
+}
+
+.progress-fill {
+  @apply bg-primary-600 h-2 rounded-full transition-all duration-300 ease-out;
+}
+
+.progress-fill.success {
+  @apply bg-success-600;
+}
+
+.progress-fill.warning {
+  @apply bg-warning-600;
+}
+
+.progress-fill.danger {
+  @apply bg-danger-600;
+}
+
+/* Task item styles */
+.task-item {
+  @apply card-hover p-4 mb-3;
+  @apply border-l-4 border-l-transparent;
+}
+
+.task-item.priority-high {
+  @apply border-l-danger-500;
+}
+
+.task-item.priority-medium {
+  @apply border-l-warning-500;
+}
+
+.task-item.priority-low {
+  @apply border-l-primary-500;
+}
+
+.task-item.completed {
+  @apply opacity-75 bg-gray-50;
+}
+
+.task-item .task-checkbox {
+  @apply w-5 h-5 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500;
+}
+
+/* Navigation styles */
+.nav-item {
+  @apply flex items-center px-3 py-2 text-sm font-medium rounded-lg;
+  @apply text-gray-700 hover:text-gray-900 hover:bg-gray-100;
+  @apply transition-all duration-200;
+}
+
+.nav-item.active {
+  @apply bg-primary-100 text-primary-900;
+}
+
+.nav-item .nav-icon {
+  @apply mr-3 flex-shrink-0 h-5 w-5;
+}
+
+/* Sidebar styles */
+.sidebar {
+  @apply fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200;
+  @apply transform transition-transform duration-300 ease-in-out lg:transform-none;
+}
+
+.sidebar.closed {
+  @apply -translate-x-full lg:translate-x-0;
+}
+
+/* Header styles */
+.header {
+  @apply sticky top-0 z-40 bg-white border-b border-gray-200;
+  @apply px-4 py-3 sm:px-6 lg:px-8;
+}
+
+/* Notification styles */
+.notification {
+  @apply max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto;
+  @apply ring-1 ring-black ring-opacity-5 overflow-hidden;
+}
+
+.notification.success {
+  @apply border-l-4 border-l-success-500;
+}
+
+.notification.warning {
+  @apply border-l-4 border-l-warning-500;
+}
+
+.notification.error {
+  @apply border-l-4 border-l-danger-500;
+}
+
+.notification.info {
+  @apply border-l-4 border-l-primary-500;
+}
+
+/* Loading skeleton styles */
+.skeleton {
+  @apply animate-pulse bg-gray-300 rounded;
+}
+
+.skeleton-text {
+  @apply skeleton h-4 mb-2;
+}
+
+.skeleton-heading {
+  @apply skeleton h-6 mb-3;
+}
+
+.skeleton-avatar {
+  @apply skeleton w-10 h-10 rounded-full;
+}
+
+/* Tooltip styles */
+.tooltip {
+  @apply absolute z-10 px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded shadow-lg;
+  @apply whitespace-nowrap opacity-0 transition-opacity duration-300;
+}
+
+.tooltip.show {
+  @apply opacity-100;
+}
+
+/* Empty state styles */
+.empty-state {
+  @apply text-center py-12;
+}
+
+.empty-state-icon {
+  @apply mx-auto h-12 w-12 text-gray-400 mb-4;
+}
+
+.empty-state-title {
+  @apply text-sm font-medium text-gray-900 mb-1;
+}
+
+.empty-state-description {
+  @apply text-sm text-gray-500 mb-6;
+}

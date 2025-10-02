@@ -1,0 +1,76 @@
+/**
+ * Basic Test Suite
+ * Simple working tests to verify Jest and Firebase setup
+ */
+
+// Import the mock setup
+import './mocks/firebase.mock';
+
+describe('Basic Test Suite', () => {
+  test('should pass basic arithmetic test', () => {
+    expect(1 + 1).toBe(2);
+    expect('hello'.toUpperCase()).toBe('HELLO');
+  });
+
+  test('should have Jest globals available', () => {
+    expect(expect).toBeDefined();
+    expect(describe).toBeDefined();
+    expect(test).toBeDefined();
+    expect(beforeEach).toBeDefined();
+    expect(afterEach).toBeDefined();
+  });
+
+  test('should mock firebase-admin module', () => {
+    const admin = require('firebase-admin');
+    expect(admin).toBeDefined();
+    expect(admin.firestore).toBeDefined();
+    expect(admin.auth).toBeDefined();
+    expect(admin.initializeApp).toBeDefined();
+  });
+
+  test('should have firebase-admin mocks working', () => {
+    const admin = require('firebase-admin');
+    
+    // Test firestore mock
+    const db = admin.firestore();
+    expect(db).toBeDefined();
+    expect(typeof db.collection).toBe('function');
+    
+    // Test auth mock  
+    const auth = admin.auth();
+    expect(auth).toBeDefined();
+    expect(typeof auth.verifyIdToken).toBe('function');
+  });
+
+  test('should have Faker available for test data', async () => {
+    const { faker } = await import('@faker-js/faker');
+    expect(faker).toBeDefined();
+    expect(typeof faker.lorem.word).toBe('function');
+    expect(typeof faker.internet.email).toBe('function');
+    
+    // Generate some test data to verify it works
+    const email = faker.internet.email();
+    const word = faker.lorem.word();
+    
+    expect(typeof email).toBe('string');
+    expect(email.includes('@')).toBe(true);
+    expect(typeof word).toBe('string');
+    expect(word.length).toBeGreaterThan(0);
+  });
+
+  test('should handle async operations', async () => {
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    const start = Date.now();
+    await delay(10);
+    const end = Date.now();
+    
+    expect(end - start).toBeGreaterThanOrEqual(10);
+  });
+
+  test('should have supertest available', async () => {
+    const request = await import('supertest');
+    expect(request.default).toBeDefined();
+    expect(typeof request.default).toBe('function');
+  });
+});

@@ -1,0 +1,1 @@
+{"version":3,"file":"taskflowSDK.js","sourceRoot":"","sources":["../src/taskflowSDK.ts"],"names":[],"mappings":";AAAA;;;GAGG;;;AASH,8CAEC;AATD,mDAAmD;AACnD,MAAa,WAAW;IACtB;QACE,OAAO,CAAC,GAAG,CAAC,wDAAwD,CAAC,CAAC;IACxE,CAAC;CACF;AAJD,kCAIC;AAED,SAAgB,iBAAiB;IAC/B,OAAO,IAAI,WAAW,EAAE,CAAC;AAC3B,CAAC"}

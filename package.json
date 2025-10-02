@@ -1,0 +1,42 @@
+{
+  "name": "taskflow-backend",
+  "version": "1.0.0",
+  "description": "TaskFlow - Smart task management backend with Firebase",
+  "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "functions",
+    "client-sdk",
+    "web"
+  ],
+  "scripts": {
+    "start": "firebase emulators:start",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:firestore": "firebase deploy --only firestore",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "build": "npm run build --workspaces",
+    "build:web": "npm run build --workspace=web",
+    "dev": "npm run dev --workspace=web",
+    "dev:web": "npm run dev --workspace=web",
+    "test": "npm run test --workspaces",
+    "test:web": "npm run test --workspace=web",
+    "lint": "npm run lint --workspaces",
+    "lint:web": "npm run lint --workspace=web",
+    "preview": "npm run preview --workspace=web",
+    "setup": "npm install && npm install --workspaces"
+  },
+  "keywords": [
+    "taskflow",
+    "firebase",
+    "task-management",
+    "notifications",
+    "deadlines"
+  ],
+  "author": "TaskFlow Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

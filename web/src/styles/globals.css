@@ -1,0 +1,232 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 min-h-screen;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    body {
+      @apply bg-gray-900 text-gray-100;
+    }
+
+    ::-webkit-scrollbar-track {
+      @apply bg-gray-800;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      @apply bg-gray-600;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      @apply bg-gray-500;
+    }
+  }
+
+  /* Focus styles */
+  :focus {
+    outline: 2px solid theme('colors.primary.500');
+    outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Selection styles */
+  ::selection {
+    @apply bg-primary-100 text-primary-900;
+  }
+}
+
+@layer components {
+  /* Typography */
+  .text-display {
+    @apply text-4xl font-bold tracking-tight;
+  }
+
+  .text-heading-1 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+
+  .text-heading-2 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .text-heading-3 {
+    @apply text-xl font-medium;
+  }
+
+  .text-body-large {
+    @apply text-lg leading-relaxed;
+  }
+
+  .text-body {
+    @apply text-base leading-normal;
+  }
+
+  .text-body-small {
+    @apply text-sm leading-normal;
+  }
+
+  .text-caption {
+    @apply text-xs text-gray-600 uppercase tracking-wide font-medium;
+  }
+
+  /* Interactive elements */
+  .interactive {
+    @apply transition-all duration-200 ease-out;
+  }
+
+  .interactive:hover {
+    @apply transform -translate-y-px;
+  }
+
+  .interactive:active {
+    @apply transform translate-y-0;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-gray-900/80 backdrop-blur-md border border-gray-700/20;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-xl shadow-soft border border-gray-200;
+  }
+
+  .card-hover {
+    @apply card interactive hover:shadow-medium hover:border-gray-300;
+  }
+
+  /* Form styles */
+  .form-input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900;
+    @apply focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply placeholder:text-gray-500 transition-all duration-200;
+  }
+
+  .form-input:disabled {
+    @apply bg-gray-100 text-gray-500 cursor-not-allowed;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  .form-error {
+    @apply text-sm text-danger-600 mt-1;
+  }
+
+  .form-hint {
+    @apply text-sm text-gray-500 mt-1;
+  }
+
+  /* Button base */
+  .btn-base {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium;
+    @apply transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+
+  /* Loading states */
+  .loading {
+    @apply animate-pulse;
+  }
+
+  .loading-spinner {
+    @apply animate-spin rounded-full border-2 border-gray-300 border-t-primary-600;
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-online {
+    @apply bg-success-500;
+  }
+
+  .status-away {
+    @apply bg-warning-500;
+  }
+
+  .status-offline {
+    @apply bg-gray-400;
+  }
+}
+
+@layer utilities {
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Layout utilities */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Animation utilities */
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  /* Print utilities */
+  @media print {
+    .print-hidden {
+      display: none !important;
+    }
+  }
+}

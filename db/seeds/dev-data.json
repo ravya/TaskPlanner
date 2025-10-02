@@ -1,0 +1,156 @@
+{
+  "users": [
+    {
+      "userId": "demo-user-1",
+      "email": "demo@taskflow.dev",
+      "displayName": "Demo User",
+      "photoURL": null,
+      "preferences": {
+        "theme": "light",
+        "notifications": true,
+        "timezone": "America/New_York",
+        "defaultNotificationTime": 60,
+        "dateFormat": "MM/DD/YYYY",
+        "timeFormat": "12h"
+      },
+      "stats": {
+        "totalTasks": 12,
+        "completedTasks": 8,
+        "activeTasks": 4,
+        "overdueTasks": 1,
+        "currentStreak": 5,
+        "longestStreak": 12,
+        "averageCompletionTime": 45,
+        "totalTimeTracked": 1250
+      }
+    }
+  ],
+  
+  "tags": [
+    {
+      "name": "work",
+      "displayName": "Work",
+      "color": "#3B82F6",
+      "icon": "💼",
+      "description": "Work-related tasks and projects"
+    },
+    {
+      "name": "personal",
+      "displayName": "Personal",
+      "color": "#10B981", 
+      "icon": "🏠",
+      "description": "Personal tasks and activities"
+    },
+    {
+      "name": "urgent",
+      "displayName": "Urgent",
+      "color": "#EF4444",
+      "icon": "🚨",
+      "description": "High priority, time-sensitive tasks"
+    },
+    {
+      "name": "health",
+      "displayName": "Health & Fitness",
+      "color": "#EC4899",
+      "icon": "💪",
+      "description": "Health, fitness, and wellness tasks"
+    },
+    {
+      "name": "learning",
+      "displayName": "Learning",
+      "color": "#8B5CF6",
+      "icon": "📚",
+      "description": "Educational and skill development tasks"
+    },
+    {
+      "name": "finance",
+      "displayName": "Finance",
+      "color": "#F59E0B",
+      "icon": "💰",
+      "description": "Financial planning and money management"
+    }
+  ],
+  
+  "tasks": [
+    {
+      "title": "Finish quarterly report",
+      "description": "Complete Q4 performance analysis and recommendations",
+      "priority": "high",
+      "tags": ["work", "urgent"],
+      "dueDate": "2024-01-15T17:00:00Z",
+      "estimatedTime": 180,
+      "status": "active"
+    },
+    {
+      "title": "Doctor appointment",
+      "description": "Annual physical checkup with Dr. Johnson",
+      "priority": "medium",
+      "tags": ["health", "personal"],
+      "dueDate": "2024-01-12T14:30:00Z",
+      "estimatedTime": 90,
+      "status": "active"
+    },
+    {
+      "title": "Learn React hooks",
+      "description": "Complete advanced React hooks tutorial series",
+      "priority": "medium",
+      "tags": ["learning", "work"],
+      "dueDate": "2024-01-20T00:00:00Z",
+      "estimatedTime": 240,
+      "status": "active"
+    },
+    {
+      "title": "Update investment portfolio",
+      "description": "Review and rebalance 401k allocations",
+      "priority": "low",
+      "tags": ["finance", "personal"],
+      "dueDate": "2024-01-25T00:00:00Z",
+      "estimatedTime": 60,
+      "status": "active"
+    },
+    {
+      "title": "Team standup presentation",
+      "description": "Prepare slides for sprint retrospective",
+      "priority": "medium",
+      "tags": ["work"],
+      "dueDate": "2024-01-10T09:00:00Z",
+      "estimatedTime": 30,
+      "status": "completed",
+      "actualTime": 25
+    },
+    {
+      "title": "Grocery shopping",
+      "description": "Weekly grocery run - check meal prep list",
+      "priority": "low",
+      "tags": ["personal"],
+      "dueDate": null,
+      "estimatedTime": 45,
+      "status": "completed",
+      "actualTime": 50
+    }
+  ],
+  
+  "notifications": [
+    {
+      "taskId": "task-1",
+      "type": "deadline_reminder",
+      "scheduledFor": "2024-01-15T16:00:00Z",
+      "message": "Task 'Finish quarterly report' is due in 1 hour",
+      "sent": false
+    },
+    {
+      "taskId": "task-2", 
+      "type": "deadline_reminder",
+      "scheduledFor": "2024-01-12T13:30:00Z",
+      "message": "Task 'Doctor appointment' is due in 1 hour",
+      "sent": false
+    },
+    {
+      "taskId": "task-3",
+      "type": "deadline_reminder", 
+      "scheduledFor": "2024-01-19T12:00:00Z",
+      "message": "Task 'Learn React hooks' is due tomorrow",
+      "sent": false
+    }
+  ]
+}

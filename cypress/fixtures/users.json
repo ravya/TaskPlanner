@@ -1,0 +1,166 @@
+{
+  "testUsers": {
+    "regular": {
+      "email": "user@taskflow.dev",
+      "password": "TestPass123!",
+      "displayName": "Regular User",
+      "firstName": "Regular",
+      "lastName": "User"
+    },
+    "admin": {
+      "email": "admin@taskflow.dev",
+      "password": "AdminPass123!",
+      "displayName": "Admin User",
+      "firstName": "Admin",
+      "lastName": "User"
+    },
+    "newUser": {
+      "email": "newbie@taskflow.dev",
+      "password": "NewPass123!",
+      "displayName": "New User",
+      "firstName": "New",
+      "lastName": "User"
+    },
+    "powerUser": {
+      "email": "power@taskflow.dev",
+      "password": "PowerPass123!",
+      "displayName": "Power User",
+      "firstName": "Power",
+      "lastName": "User"
+    }
+  },
+  "sampleUsers": [
+    {
+      "email": "alice@example.com",
+      "password": "AlicePass123!",
+      "displayName": "Alice Johnson",
+      "firstName": "Alice",
+      "lastName": "Johnson",
+      "role": "user",
+      "timezone": "America/New_York",
+      "preferences": {
+        "theme": "light",
+        "defaultView": "list"
+      }
+    },
+    {
+      "email": "bob@example.com", 
+      "password": "BobPass123!",
+      "displayName": "Bob Smith",
+      "firstName": "Bob",
+      "lastName": "Smith",
+      "role": "user",
+      "timezone": "America/Los_Angeles",
+      "preferences": {
+        "theme": "dark",
+        "defaultView": "kanban"
+      }
+    },
+    {
+      "email": "carol@example.com",
+      "password": "CarolPass123!",
+      "displayName": "Carol Brown",
+      "firstName": "Carol",
+      "lastName": "Brown",
+      "role": "moderator",
+      "timezone": "Europe/London",
+      "preferences": {
+        "theme": "auto",
+        "defaultView": "calendar"
+      }
+    },
+    {
+      "email": "david@example.com",
+      "password": "DavidPass123!",
+      "displayName": "David Wilson",
+      "firstName": "David",
+      "lastName": "Wilson",
+      "role": "user",
+      "timezone": "Asia/Tokyo",
+      "preferences": {
+        "theme": "light",
+        "defaultView": "list"
+      }
+    },
+    {
+      "email": "eve@example.com",
+      "password": "EvePass123!",
+      "displayName": "Eve Davis",
+      "firstName": "Eve",
+      "lastName": "Davis",
+      "role": "user",
+      "timezone": "Australia/Sydney",
+      "preferences": {
+        "theme": "dark",
+        "defaultView": "kanban"
+      }
+    }
+  ],
+  "edgeCaseUsers": [
+    {
+      "email": "very.long.email.address.for.testing@very.long.domain.example.com",
+      "password": "VeryLongPass123!",
+      "displayName": "Very Long Name That Exceeds Normal Limits",
+      "firstName": "Very Long First",
+      "lastName": "Very Long Last"
+    },
+    {
+      "email": "special@example.com",
+      "password": "Special123!",
+      "displayName": "José María García-López",
+      "firstName": "José María",
+      "lastName": "García-López"
+    },
+    {
+      "email": "minimal@example.com",
+      "password": "Minimal123!",
+      "displayName": "Min User",
+      "firstName": "Min",
+      "lastName": "User"
+    }
+  ],
+  "authTestCases": [
+    {
+      "scenario": "valid_credentials",
+      "email": "user@taskflow.dev",
+      "password": "TestPass123!",
+      "expectedResult": "success"
+    },
+    {
+      "scenario": "invalid_email",
+      "email": "invalid-email",
+      "password": "TestPass123!",
+      "expectedResult": "error"
+    },
+    {
+      "scenario": "wrong_password",
+      "email": "user@taskflow.dev",
+      "password": "WrongPass123!",
+      "expectedResult": "error"
+    },
+    {
+      "scenario": "empty_email",
+      "email": "",
+      "password": "TestPass123!",
+      "expectedResult": "error"
+    },
+    {
+      "scenario": "empty_password",
+      "email": "user@taskflow.dev",
+      "password": "",
+      "expectedResult": "error"
+    },
+    {
+      "scenario": "weak_password",
+      "email": "weak@example.com",
+      "password": "123",
+      "expectedResult": "error"
+    },
+    {
+      "scenario": "sql_injection_attempt",
+      "email": "'; DROP TABLE users; --",
+      "password": "TestPass123!",
+      "expectedResult": "error"
+    }
+  ]
+}

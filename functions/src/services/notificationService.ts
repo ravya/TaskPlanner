@@ -404,14 +404,14 @@ export class NotificationService {
         },
       };
       
-      const response = await this.messaging.sendMulticast(message);
-      
+      const response = await (this.messaging as any).sendMulticast(message);
+
       console.log(`📤 Sent to ${response.successCount}/${tokens.length} tokens`);
-      
+
       // Handle failed tokens (remove invalid ones)
       if (response.failureCount > 0) {
         const failedTokens: string[] = [];
-        response.responses.forEach((resp, idx) => {
+        response.responses.forEach((resp: any, idx: number) => {
           if (!resp.success && resp.error) {
             console.warn(`❌ Failed to send to token ${idx}: ${resp.error.message}`);
             if (resp.error.code === 'messaging/registration-token-not-registered' ||

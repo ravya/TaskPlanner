@@ -45,27 +45,18 @@ isSupported().then((supported) => {
 export { messaging };
 
 // Connect to emulators in development
-if (import.meta.env.DEV) {
-  const connectEmulators = () => {
-    try {
-      // Connect Auth emulator
-      if (!auth.config.emulator) {
-        connectAuthEmulator(auth, 'http://localhost:9099');
-        console.log('🔧 Connected to Auth emulator');
-      }
+if (import.meta.env.VITE_USE_EMULATORS === 'true' || import.meta.env.DEV) {
+  try {
+    // Connect Auth emulator
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    console.log('🔧 Connected to Auth emulator at http://127.0.0.1:9099');
 
-      // Connect Firestore emulator
-      if (!(db as any)._delegate._databaseId.projectId.includes('demo-')) {
-        connectFirestoreEmulator(db, 'localhost', 8080);
-        console.log('🔧 Connected to Firestore emulator');
-      }
-    } catch (error) {
-      console.warn('⚠️ Could not connect to emulators:', error);
-    }
-  };
-
-  // Delay emulator connection to ensure services are ready
-  setTimeout(connectEmulators, 100);
+    // Connect Firestore emulator
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    console.log('🔧 Connected to Firestore emulator at 127.0.0.1:8080');
+  } catch (error) {
+    console.warn('⚠️ Could not connect to emulators:', error);
+  }
 }
 
 // Firebase configuration object for components

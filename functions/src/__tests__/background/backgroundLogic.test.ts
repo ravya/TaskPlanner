@@ -236,12 +236,12 @@ describe('Background Functions Logic', () => {
         const userId = userDoc.id;
         const tasks = await db.collection('tasks').where('userId', '==', userId).get();
         
-        const taskData = tasks.docs.map(doc => doc.data());
+        const taskData = tasks.docs.map((doc: any) => doc.data());
         const stats = {
           totalTasks: taskData.length,
-          completedTasks: taskData.filter(t => t.status === 'completed').length,
-          activeTasks: taskData.filter(t => ['todo', 'in_progress'].includes(t.status)).length,
-          overdueTasks: taskData.filter(t => t.status === 'overdue').length
+          completedTasks: taskData.filter((t: any) => t.status === 'completed').length,
+          activeTasks: taskData.filter((t: any) => ['todo', 'in_progress'].includes(t.status)).length,
+          overdueTasks: taskData.filter((t: any) => t.status === 'overdue').length
         };
         
         batch.update(userDoc.ref, {
@@ -277,9 +277,9 @@ describe('Background Functions Logic', () => {
         const userRef = db.doc(`users/${afterData.userId}`);
         
         await userRef.update({
-          'stats.completedTasks': mockAdmin.firestore.FieldValue.increment(1),
-          'stats.activeTasks': mockAdmin.firestore.FieldValue.increment(-1),
-          lastActiveAt: mockAdmin.firestore.Timestamp.now()
+          'stats.completedTasks': (mockAdmin.firestore as any).FieldValue.increment(1),
+          'stats.activeTasks': (mockAdmin.firestore as any).FieldValue.increment(-1),
+          lastActiveAt: (mockAdmin.firestore as any).Timestamp.now()
         });
       }
       
@@ -328,8 +328,8 @@ describe('Background Functions Logic', () => {
           userId: userId,
           name: tag.name,
           color: tag.color,
-          createdAt: mockAdmin.firestore.Timestamp.now(),
-          updatedAt: mockAdmin.firestore.Timestamp.now()
+          createdAt: (mockAdmin.firestore as any).Timestamp.now(),
+          updatedAt: (mockAdmin.firestore as any).Timestamp.now()
         });
       }
       
@@ -346,9 +346,9 @@ describe('Background Functions Logic', () => {
       
       try {
         await mockAdmin.firestore().collection('tasks').get();
-      } catch (error) {
+      } catch (error: unknown) {
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe('Database connection failed');
+        expect((error as Error).message).toBe('Database connection failed');
       }
     });
 

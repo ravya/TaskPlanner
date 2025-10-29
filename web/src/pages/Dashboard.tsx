@@ -1,7 +1,7 @@
 import { getAuth, signOut } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { getFirestore, collection, query, where, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 
 interface Task {
   id: string;
@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [todaysTasks, setTodaysTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [showAllTodayTasks, setShowAllTodayTasks] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -90,11 +91,61 @@ export default function Dashboard() {
     }
   };
 
+  const handleMoveToToday = async (taskId: string) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+      const today = new Date().toISOString().split('T')[0];
+
+      await updateDoc(taskRef, {
+        startDate: today,
+        updatedAt: new Date()
+      });
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error moving task to today:', error);
+      alert('Failed to move task to today');
+    }
+  };
+
+  const handleIgnoreTask = async (taskId: string) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+
+      await updateDoc(taskRef, {
+        ignored: true,
+        updatedAt: new Date()
+      });
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error ignoring task:', error);
+      alert('Failed to ignore task');
+    }
+  };
+
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const pendingTasks = tasks.filter(t => t.status === 'todo').length;
+  const completedTasks = tasks.filter(t => t.status === 'completed' || t.completed).length;
+  const pendingTasks = tasks.filter(t => t.status !== 'completed' && !t.completed && t.status !== 'in_progress').length;
   const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Get pending tasks from past days (not today, not completed, not ignored)
+  const today = new Date().toISOString().split('T')[0];
+  const pastPendingTasks = tasks.filter(t => {
+    if (t.status === 'completed' || t.completed) return false;
+    if ((t as any).ignored) return false; // Exclude ignored tasks
+    if (!t.startDate) return false;
+    return t.startDate < today;
+  });
 
   const formatDateTime = (date: string, time?: string) => {
     if (!date) return '';
@@ -202,7 +253,10 @@ export default function Dashboard() {
           </div>
 
           {/* Task Progress */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <Link
+            to="/analytics"
+            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Task Progress</h3>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -221,13 +275,21 @@ export default function Dashboard() {
                 style={{ width: `${completionRate}%` }}
               ></div>
             </div>
-            <p className="text-sm text-gray-500">
-              {completedTasks} of {totalTasks} tasks
-            </p>
-          </div>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                {completedTasks} of {totalTasks} tasks
+              </p>
+              <span className="text-xs text-green-600 font-medium">
+                View Analytics →
+              </span>
+            </div>
+          </Link>
 
           {/* Today's Tasks */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <Link
+            to="/tasks"
+            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Today's Tasks</h3>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -237,11 +299,75 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="text-4xl font-bold text-purple-600 mb-2">{todaysTasks.length}</div>
-            <p className="text-sm text-gray-500">
-              {todaysTasks.filter(t => t.status === 'completed').length} completed
-            </p>
-          </div>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                {todaysTasks.filter(t => t.status === 'completed').length} completed
+              </p>
+              <span className="text-xs text-purple-600 font-medium">
+                View All →
+              </span>
+            </div>
+          </Link>
         </div>
+
+        {/* Pending Tasks from Past Days */}
+        {pastPendingTasks.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg shadow mb-8">
+            <div className="p-6 border-b border-orange-200 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold text-orange-900 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Pending Tasks from Past Days
+                </h2>
+                <p className="text-sm text-orange-700 mt-1">
+                  {pastPendingTasks.length} task{pastPendingTasks.length !== 1 ? 's' : ''} waiting to be completed
+                </p>
+              </div>
+            </div>
+
+            <div className="divide-y divide-orange-200">
+              {pastPendingTasks.map((task) => (
+                <div key={task.id} className="p-4 hover:bg-orange-100 flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-base font-medium text-gray-900">
+                        {task.title}
+                      </h3>
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                    {task.description && (
+                      <p className="text-sm text-gray-600 mb-1">
+                        {task.description}
+                      </p>
+                    )}
+                    <p className="text-xs text-orange-600">
+                      Originally scheduled: {new Date(task.startDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleMoveToToday(task.id)}
+                      className="px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700 font-medium whitespace-nowrap"
+                    >
+                      Move to Today
+                    </button>
+                    <button
+                      onClick={() => handleIgnoreTask(task.id)}
+                      className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
+                      title="Ignore this task"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Today's Tasks List */}
         <div className="bg-white rounded-lg shadow">
@@ -272,7 +398,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {todaysTasks.slice(0, 5).map((task) => (
+              {(showAllTodayTasks ? todaysTasks : todaysTasks.slice(0, 5)).map((task) => (
                 <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
                   <input
                     type="checkbox"
@@ -302,12 +428,21 @@ export default function Dashboard() {
               ))}
               {todaysTasks.length > 5 && (
                 <div className="p-4 text-center">
-                  <Link
-                    to="/tasks"
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    View {todaysTasks.length - 5} more tasks →
-                  </Link>
+                  {!showAllTodayTasks ? (
+                    <button
+                      onClick={() => setShowAllTodayTasks(true)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      View {todaysTasks.length - 5} more tasks →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowAllTodayTasks(false)}
+                      className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                    >
+                      Show less ↑
+                    </button>
+                  )}
                 </div>
               )}
             </div>

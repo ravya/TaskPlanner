@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -21,11 +21,14 @@ interface Task {
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const formRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline'>('priority');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -155,6 +158,11 @@ export default function Tasks() {
       repeatEndDate: task.repeatEndDate || ''
     });
     setShowAddForm(true);
+
+    // Scroll to form smoothly after a brief delay to allow React to render
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleToggleComplete = async (task: Task) => {
@@ -219,6 +227,88 @@ export default function Tasks() {
     }
   };
 
+  const getPriorityValue = (priority: string): number => {
+    switch (priority) {
+      case 'high': return 3;
+      case 'medium': return 2;
+      case 'low': return 1;
+      default: return 0;
+    }
+  };
+
+  const getFilteredAndSortedTasks = (): Task[] => {
+    // First, filter by status
+    let filteredTasks = [...tasks];
+
+    if (statusFilter === 'active') {
+      filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
+    } else if (statusFilter === 'completed') {
+      filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
+    }
+
+    // Separate completed and active tasks
+    const completedTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
+    const activeTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
+
+    // Sort active tasks based on selected sort option
+    let sortedActiveTasks: Task[] = [];
+
+    switch (sortBy) {
+      case 'priority':
+        sortedActiveTasks = activeTasks.sort((a, b) => getPriorityValue(b.priority) - getPriorityValue(a.priority));
+        break;
+
+      case 'time':
+        sortedActiveTasks = activeTasks.sort((a, b) => {
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1;
+          if (!b.startDate) return -1;
+
+          const dateCompare = a.startDate.localeCompare(b.startDate);
+          if (dateCompare !== 0) return dateCompare;
+
+          // If same date, sort by time
+          const timeA = a.startTime || '23:59';
+          const timeB = b.startTime || '23:59';
+          return timeA.localeCompare(timeB);
+        });
+        break;
+
+      case 'deadline':
+        sortedActiveTasks = activeTasks.sort((a, b) => {
+          // Tasks with dates come first, sorted by earliest date
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1; // Tasks without dates go to end
+          if (!b.startDate) return -1;
+
+          return a.startDate.localeCompare(b.startDate); // Nearest date first
+        });
+        break;
+
+      default:
+        sortedActiveTasks = activeTasks;
+    }
+
+    // Sort completed tasks by completion date (most recent first) or by same criteria
+    const sortedCompletedTasks = completedTasks.sort((a, b) => {
+      // If both have completion dates, sort by most recent
+      const aCompleted = (a as any).completedAt;
+      const bCompleted = (b as any).completedAt;
+
+      if (aCompleted && bCompleted) {
+        return new Date(bCompleted).getTime() - new Date(aCompleted).getTime();
+      }
+
+      // Otherwise sort by priority
+      return getPriorityValue(b.priority) - getPriorityValue(a.priority);
+    });
+
+    // Return active tasks first, then completed tasks
+    return [...sortedActiveTasks, ...sortedCompletedTasks];
+  };
+
+  const sortedTasks = getFilteredAndSortedTasks();
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-800';
@@ -280,7 +370,7 @@ export default function Tasks() {
 
         {/* Add/Edit Task Form */}
         {showAddForm && (
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div ref={formRef} className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">
               {editingTask ? 'Edit Task' : 'Create New Task'}
             </h2>
@@ -446,8 +536,39 @@ export default function Tasks() {
 
         {/* Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold">Your Tasks ({tasks.length})</h2>
+          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Your Tasks ({sortedTasks.length})</h2>
+
+            {/* Filters and Sort */}
+            <div className="flex items-center gap-4">
+              {/* Status Filter */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Filter:</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'completed')}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Tasks ({tasks.length})</option>
+                  <option value="active">Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})</option>
+                  <option value="completed">Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})</option>
+                </select>
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Sort by:</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline')}
+                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="priority">Priority (High to Low)</option>
+                  <option value="time">Date & Time</option>
+                  <option value="deadline">Deadline (Nearest First)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {loading ? (
@@ -456,9 +577,13 @@ export default function Tasks() {
             <div className="p-8 text-center text-gray-500">
               No tasks yet. Click "Add New Task" to create one!
             </div>
+          ) : sortedTasks.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No tasks match the selected filter.
+            </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {tasks.map((task) => (
+              {sortedTasks.map((task) => (
                 <div key={task.id} className="p-4 hover:bg-gray-50 flex items-start gap-3">
                   {/* Checkbox */}
                   <input

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskFlow - Offline</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 400px;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        p {
+            font-size: 1.125rem;
+            line-height: 1.6;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+        .retry-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .retry-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📱</div>
+        <h1>You're Offline</h1>
+        <p>TaskFlow works offline! Your tasks are saved locally and will sync when you're back online.</p>
+        <button class="retry-btn" onclick="location.reload()">
+            Try Again
+        </button>
+    </div>
+
+    <script>
+        // Check for network connectivity and reload if back online
+        window.addEventListener('online', () => {
+            location.reload();
+        });
+    </script>
+</body>
+</html>

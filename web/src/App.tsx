@@ -7,6 +7,7 @@ import { lazy, Suspense } from 'react';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Tasks = lazy(() => import('./pages/Tasks'));
+const Analytics = lazy(() => import('./pages/Analytics'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 
@@ -71,6 +72,7 @@ function App() {
         <Route element={<ProtectedRouteWrapper />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Route>
 
         {/* Fallback */}

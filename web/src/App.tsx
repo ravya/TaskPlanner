@@ -8,6 +8,7 @@ import { lazy, Suspense } from 'react';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Analytics = lazy(() => import('./pages/Analytics'));
+const Widget = lazy(() => import('./pages/Widget'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 
@@ -73,6 +74,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/widget" element={<Widget />} />
         </Route>
 
         {/* Fallback */}

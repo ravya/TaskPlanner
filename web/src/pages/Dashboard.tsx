@@ -28,6 +28,18 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [showAllTodayTasks, setShowAllTodayTasks] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    startDate: new Date().toISOString().split('T')[0],
+    startTime: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    tags: '',
+    isRepeating: false,
+    repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
+    repeatEndDate: ''
+  });
 
   useEffect(() => {
     const auth = getAuth();
@@ -278,6 +290,103 @@ export default function Dashboard() {
     }
   };
 
+  const handleCreateMissingOccurrence = async (task: Task) => {
+    try {
+      const db = getFirestore();
+      const today = new Date().toISOString().split('T')[0];
+
+      const taskData = {
+        title: task.title,
+        description: task.description,
+        startDate: today,
+        startTime: task.startTime || null,
+        status: 'todo',
+        priority: task.priority,
+        tags: task.tags || [],
+        isRepeating: task.isRepeating,
+        repeatFrequency: task.repeatFrequency,
+        repeatEndDate: task.repeatEndDate || null,
+        userId: task.userId,
+        createdAt: Timestamp.now(),
+        completed: false
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error creating missing occurrence:', error);
+      alert('Failed to create task');
+    }
+  };
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user) {
+      alert('You must be logged in to create a task');
+      return;
+    }
+
+    if (!formData.title.trim()) {
+      alert('Please enter a task title');
+      return;
+    }
+
+    try {
+      const db = getFirestore();
+
+      // Parse tags from comma-separated string
+      const tagArray = formData.tags
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(tag => tag.length > 0);
+
+      // Use today's date if startDate is not set
+      const taskStartDate = formData.startDate || new Date().toISOString().split('T')[0];
+
+      const taskData = {
+        title: formData.title,
+        description: formData.description,
+        startDate: taskStartDate,
+        startTime: formData.startTime || null,
+        priority: formData.priority,
+        tags: tagArray,
+        isRepeating: formData.isRepeating,
+        repeatFrequency: formData.isRepeating ? formData.repeatFrequency : null,
+        repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
+        status: 'todo',
+        userId: user.uid,
+        createdAt: Timestamp.now()
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        startDate: new Date().toISOString().split('T')[0],
+        startTime: '',
+        priority: 'medium',
+        tags: '',
+        isRepeating: false,
+        repeatFrequency: 'daily',
+        repeatEndDate: ''
+      });
+      setShowAddForm(false);
+
+      // Reload tasks
+      await loadTasks(user.uid);
+    } catch (error: any) {
+      console.error('Error saving task:', error);
+      alert(`Failed to save task: ${error.message}`);
+    }
+  };
+
   const handleToggleComplete = async (task: Task) => {
     try {
       const db = getFirestore();
@@ -335,66 +444,103 @@ export default function Dashboard() {
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   // Get pending tasks from past days (not today, not completed, not ignored)
-  // Also include repeating tasks that should have had occurrences in past days
+  // This includes both regular tasks and missing repeating task occurrences
   const today = new Date().toISOString().split('T')[0];
-  const pastPendingTasks = tasks.filter(t => {
-    if (t.status === 'completed' || t.completed) return false;
-    if ((t as any).ignored) return false; // Exclude ignored tasks
-    if (!t.startDate) return false;
+  const pastPendingTasks: Task[] = [];
+  
+  // First, add regular tasks from past days
+  tasks.forEach(t => {
+    if (t.status === 'completed' || t.completed) return;
+    if ((t as any).ignored) return;
+    if (!t.startDate) return;
     
     const taskDate = t.startDate.split('T')[0];
+    if (taskDate < today) {
+      pastPendingTasks.push(t);
+    }
+  });
+  
+  // Then, find missing repeating task occurrences from past days
+  tasks.forEach(t => {
+    if (!t.isRepeating || !t.repeatFrequency || !t.startDate) return;
+    if (t.status === 'completed' || t.completed) return;
     
-    // Include tasks from past days
-    if (taskDate < today) return true;
+    // Only process original repeating tasks
+    const isOriginalTask = !tasks.some(otherTask => 
+      otherTask.id !== t.id &&
+      otherTask.isRepeating === t.isRepeating &&
+      otherTask.repeatFrequency === t.repeatFrequency &&
+      otherTask.title === t.title &&
+      otherTask.userId === t.userId &&
+      otherTask.startDate < t.startDate
+    );
     
-    // For repeating tasks, check if there should be past occurrences
-    if (t.isRepeating && t.repeatFrequency) {
-      const originalDate = new Date(t.startDate);
-      const todayDate = new Date(today);
+    if (!isOriginalTask) return;
+    
+    const originalDate = new Date(t.startDate);
+    const todayDate = new Date(today);
+    
+    // Check for missing occurrences from past days
+    let checkDate = new Date(originalDate);
+    checkDate.setDate(checkDate.getDate() + 1); // Start from day after original
+    
+    while (checkDate < todayDate) {
+      const checkDateStr = checkDate.toISOString().split('T')[0];
       
-      // Check if there are missing occurrences between original date and today
-      let checkDate = new Date(originalDate);
-      checkDate.setDate(checkDate.getDate() + 1); // Start from day after original
+      // Check if this occurrence exists
+      const occurrenceExists = tasks.some(existingTask => 
+        existingTask.title === t.title &&
+        existingTask.startDate === checkDateStr &&
+        existingTask.userId === t.userId &&
+        existingTask.isRepeating === t.isRepeating &&
+        existingTask.repeatFrequency === t.repeatFrequency
+      );
       
-      while (checkDate < todayDate) {
-        const checkDateStr = checkDate.toISOString().split('T')[0];
-        
-        // Check if this occurrence exists
-        const occurrenceExists = tasks.some(existingTask => 
-          existingTask.isRepeating === t.isRepeating &&
-          existingTask.repeatFrequency === t.repeatFrequency &&
-          existingTask.startDate === checkDateStr &&
-          existingTask.title === t.title &&
-          existingTask.userId === t.userId &&
-          (existingTask.status !== 'completed' && !existingTask.completed)
-        );
-        
-        // If occurrence is missing and not completed, it should be in pending
-        if (!occurrenceExists) {
-          // Check if within repeat end date
-          if (t.repeatEndDate) {
-            const endDate = new Date(t.repeatEndDate);
-            if (checkDate > endDate) break;
-          }
-          return true; // This repeating task has missing pending occurrences
+      // If occurrence is missing, create a virtual task for pending section
+      if (!occurrenceExists) {
+        // Check if within repeat end date
+        if (t.repeatEndDate) {
+          const endDate = new Date(t.repeatEndDate);
+          if (checkDate > endDate) break;
         }
         
-        // Move to next occurrence
-        switch (t.repeatFrequency) {
-          case 'daily':
-            checkDate.setDate(checkDate.getDate() + 1);
-            break;
-          case 'weekly':
-            checkDate.setDate(checkDate.getDate() + 7);
-            break;
-          case 'monthly':
-            checkDate.setMonth(checkDate.getMonth() + 1);
-            break;
+        // Create a virtual task object for the missing occurrence
+        const missingOccurrence: Task = {
+          id: `missing-${t.id}-${checkDateStr}`,
+          title: t.title,
+          description: t.description,
+          startDate: checkDateStr,
+          startTime: t.startTime,
+          status: 'todo',
+          priority: t.priority,
+          tags: t.tags || [],
+          isRepeating: t.isRepeating,
+          repeatFrequency: t.repeatFrequency,
+          repeatEndDate: t.repeatEndDate,
+          userId: t.userId,
+          createdAt: t.createdAt,
+          completed: false
+        };
+        
+        // Check if not already in pastPendingTasks
+        if (!pastPendingTasks.some(pt => pt.id === missingOccurrence.id)) {
+          pastPendingTasks.push(missingOccurrence);
         }
       }
+      
+      // Move to next occurrence
+      switch (t.repeatFrequency) {
+        case 'daily':
+          checkDate.setDate(checkDate.getDate() + 1);
+          break;
+        case 'weekly':
+          checkDate.setDate(checkDate.getDate() + 7);
+          break;
+        case 'monthly':
+          checkDate.setMonth(checkDate.getMonth() + 1);
+          break;
+      }
     }
-    
-    return false;
   });
 
   const formatDateTime = (date: string, time?: string) => {
@@ -442,6 +588,184 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Floating Add Task Button */}
+        {!showAddForm && (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50"
+            title="Add New Task"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
+
+        {/* Task Creation Form Modal/Overlay */}
+        {showAddForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddForm(false)}>
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-gray-900">Create New Task</h3>
+                <button
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setFormData({
+                      title: '',
+                      description: '',
+                      startDate: new Date().toISOString().split('T')[0],
+                      startTime: '',
+                      priority: 'medium',
+                      tags: '',
+                      isRepeating: false,
+                      repeatFrequency: 'daily',
+                      repeatEndDate: ''
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-6">
+                <form onSubmit={handleAddTask} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                    <input
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter task title"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter task description"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                      <input
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Time (Optional)</label>
+                      <input
+                        type="time"
+                        value={formData.startTime}
+                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value as 'low' | 'medium' | 'high' })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={formData.tags}
+                        onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="work, urgent, personal"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.isRepeating}
+                        onChange={(e) => setFormData({ ...formData, isRepeating: e.target.checked })}
+                        className="rounded"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Repeat this task</span>
+                    </label>
+                  </div>
+                  {formData.isRepeating && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6 border-l-2 border-blue-200">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Repeat Frequency</label>
+                        <select
+                          value={formData.repeatFrequency}
+                          onChange={(e) => setFormData({ ...formData, repeatFrequency: e.target.value as 'daily' | 'weekly' | 'monthly' })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Repeat Until (Optional)</label>
+                        <input
+                          type="date"
+                          value={formData.repeatEndDate}
+                          onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-4">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+                    >
+                      Create Task
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddForm(false);
+                        setFormData({
+                          title: '',
+                          description: '',
+                          startDate: new Date().toISOString().split('T')[0],
+                          startTime: '',
+                          priority: 'medium',
+                          tags: '',
+                          isRepeating: false,
+                          repeatFrequency: 'daily',
+                          repeatEndDate: ''
+                        });
+                      }}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Email Verification Banner - Only show if not verified and account < 1 week */}
         {showEmailVerification && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -595,23 +919,36 @@ export default function Dashboard() {
                       </p>
                     )}
                     <p className="text-xs text-orange-600">
-                      Originally scheduled: {new Date(task.startDate).toLocaleDateString()}
+                      {task.id.startsWith('missing-') ? (
+                        <>Missing occurrence from: {new Date(task.startDate).toLocaleDateString()} (Repeating task)</>
+                      ) : (
+                        <>Originally scheduled: {new Date(task.startDate).toLocaleDateString()}</>
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleMoveToToday(task.id)}
+                      onClick={() => {
+                        if (task.id.startsWith('missing-')) {
+                          // Create the missing occurrence
+                          handleCreateMissingOccurrence(task);
+                        } else {
+                          handleMoveToToday(task.id);
+                        }
+                      }}
                       className="px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700 font-medium whitespace-nowrap"
                     >
-                      Move to Today
+                      {task.id.startsWith('missing-') ? 'Create & Move to Today' : 'Move to Today'}
                     </button>
-                    <button
-                      onClick={() => handleIgnoreTask(task.id)}
-                      className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
-                      title="Ignore this task"
-                    >
-                      Ignore
-                    </button>
+                    {!task.id.startsWith('missing-') && (
+                      <button
+                        onClick={() => handleIgnoreTask(task.id)}
+                        className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
+                        title="Ignore this task"
+                      >
+                        Ignore
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

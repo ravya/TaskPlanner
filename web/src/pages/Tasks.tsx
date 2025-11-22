@@ -28,13 +28,16 @@ export default function Tasks() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline'>('priority');
+  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>('all');
+  const [customDateStart, setCustomDateStart] = useState<string>('');
+  const [customDateEnd, setCustomDateEnd] = useState<string>('');
 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    startDate: '',
+    startDate: new Date().toISOString().split('T')[0], // Default to today
     startTime: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     tags: '',
@@ -93,10 +96,13 @@ export default function Tasks() {
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
+      // Use today's date if startDate is not set
+      const taskStartDate = formData.startDate || new Date().toISOString().split('T')[0];
+
       const taskData = {
         title: formData.title,
         description: formData.description,
-        startDate: formData.startDate,
+        startDate: taskStartDate,
         startTime: formData.startTime || null,
         priority: formData.priority,
         tags: tagArray,
@@ -126,7 +132,7 @@ export default function Tasks() {
       setFormData({
         title: '',
         description: '',
-        startDate: '',
+        startDate: new Date().toISOString().split('T')[0], // Default to today
         startTime: '',
         priority: 'medium',
         tags: '',
@@ -150,7 +156,7 @@ export default function Tasks() {
     setFormData({
       title: task.title,
       description: task.description || '',
-      startDate: task.startDate || '',
+      startDate: task.startDate || new Date().toISOString().split('T')[0], // Default to today if not set
       startTime: task.startTime || '',
       priority: task.priority,
       tags: task.tags ? task.tags.join(', ') : '',
@@ -343,6 +349,17 @@ export default function Tasks() {
           if (!b.startDate) return -1;
 
           return a.startDate.localeCompare(b.startDate); // Nearest date first
+        });
+        break;
+
+      case 'date':
+        sortedActiveTasks = activeTasks.sort((a, b) => {
+          // Sort by date (ascending - earliest first)
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1; // Tasks without dates go to end
+          if (!b.startDate) return -1;
+
+          return a.startDate.localeCompare(b.startDate);
         });
         break;
 
@@ -597,34 +614,92 @@ export default function Tasks() {
 
         {/* Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Your Tasks ({sortedTasks.length})</h2>
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold mb-4">Your Tasks ({sortedTasks.length})</h2>
+
+            {/* Status Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-4 py-2 font-medium text-sm ${
+                  statusFilter === 'all'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                All ({tasks.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('active')}
+                className={`px-4 py-2 font-medium text-sm ${
+                  statusFilter === 'active'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('completed')}
+                className={`px-4 py-2 font-medium text-sm ${
+                  statusFilter === 'completed'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})
+              </button>
+            </div>
 
             {/* Filters and Sort */}
-            <div className="flex items-center gap-4">
-              {/* Status Filter */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Date Filter */}
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Filter:</label>
+                <label className="text-sm font-medium text-gray-700">Date:</label>
                 <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'completed')}
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom')}
                   className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">All Tasks ({tasks.length})</option>
-                  <option value="active">Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})</option>
-                  <option value="completed">Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})</option>
+                  <option value="all">All Dates</option>
+                  <option value="today">Today</option>
+                  <option value="thisWeek">This Week</option>
+                  <option value="thisMonth">This Month</option>
+                  <option value="custom">Custom Range</option>
                 </select>
               </div>
 
+              {/* Custom Date Range */}
+              {dateFilter === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customDateStart}
+                    onChange={(e) => setCustomDateStart(e.target.value)}
+                    placeholder="Start Date"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-500">to</span>
+                  <input
+                    type="date"
+                    value={customDateEnd}
+                    onChange={(e) => setCustomDateEnd(e.target.value)}
+                    placeholder="End Date"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
               {/* Sort Dropdown */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-auto">
                 <label className="text-sm font-medium text-gray-700">Sort by:</label>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline')}
+                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline' | 'date')}
                   className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="priority">Priority (High to Low)</option>
+                  <option value="date">Date (Earliest First)</option>
                   <option value="time">Date & Time</option>
                   <option value="deadline">Deadline (Nearest First)</option>
                 </select>

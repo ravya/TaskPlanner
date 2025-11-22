@@ -51,6 +51,139 @@ export default function Dashboard() {
     }
   }, []);
 
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
+  const generateMissingRepeatingOccurrences = async (tasks: Task[], userId: string) => {
+    const db = getFirestore();
+    const today = new Date().toISOString().split('T')[0];
+    const createdTasks: string[] = [];
+
+    for (const task of tasks) {
+      // Only process the original repeating task (not occurrences)
+      // Original tasks are those that match the original startDate
+      if (!task.isRepeating || !task.repeatFrequency || !task.startDate) continue;
+      
+      // Skip if this is already an occurrence (check if there's a task with earlier date and same title)
+      const isOriginalTask = !tasks.some(t => 
+        t.id !== task.id &&
+        t.isRepeating === task.isRepeating &&
+        t.repeatFrequency === task.repeatFrequency &&
+        t.title === task.title &&
+        t.userId === task.userId &&
+        t.startDate < task.startDate
+      );
+      
+      if (!isOriginalTask) continue; // Skip occurrences, only process originals
+
+      // Check if we should create occurrences for this repeating task
+      if (!shouldCreateNextOccurrence(task)) continue;
+
+      const originalDate = new Date(task.startDate);
+      const todayDate = new Date(today);
+      
+      // Generate occurrences from original date up to today
+      let currentDate = new Date(originalDate);
+      currentDate.setDate(currentDate.getDate() + 1); // Start from day after original
+
+      while (currentDate <= todayDate) {
+        const occurrenceDate = currentDate.toISOString().split('T')[0];
+        
+        // Check if occurrence already exists in current tasks list
+        const existingTask = tasks.find(t => 
+          t.title === task.title &&
+          t.startDate === occurrenceDate &&
+          t.userId === task.userId &&
+          t.isRepeating === task.isRepeating &&
+          t.repeatFrequency === task.repeatFrequency
+        );
+
+        // Also check database directly to avoid duplicates
+        if (!existingTask) {
+          const checkQuery = query(
+            collection(db, 'tasks'),
+            where('userId', '==', userId),
+            where('title', '==', task.title),
+            where('startDate', '==', occurrenceDate),
+            where('isRepeating', '==', true),
+            where('repeatFrequency', '==', task.repeatFrequency)
+          );
+          const checkSnapshot = await getDocs(checkQuery);
+          
+          if (checkSnapshot.empty) {
+            // Check if we're within the repeat end date
+            if (task.repeatEndDate) {
+              const endDate = new Date(task.repeatEndDate);
+              if (currentDate > endDate) break;
+            }
+
+            // Create the missing occurrence
+            const nextTaskData = {
+              title: task.title,
+              description: task.description,
+              startDate: occurrenceDate,
+              startTime: task.startTime || null,
+              status: 'todo',
+              priority: task.priority,
+              tags: task.tags || [],
+              isRepeating: task.isRepeating,
+              repeatFrequency: task.repeatFrequency,
+              repeatEndDate: task.repeatEndDate || null,
+              userId: task.userId,
+              createdAt: Timestamp.now(),
+              completed: false
+            };
+
+            try {
+              await addDoc(collection(db, 'tasks'), nextTaskData);
+              createdTasks.push(occurrenceDate);
+            } catch (error) {
+              console.error(`Error creating occurrence for ${occurrenceDate}:`, error);
+            }
+          }
+        }
+
+        // Move to next occurrence date
+        switch (task.repeatFrequency) {
+          case 'daily':
+            currentDate.setDate(currentDate.getDate() + 1);
+            break;
+          case 'weekly':
+            currentDate.setDate(currentDate.getDate() + 7);
+            break;
+          case 'monthly':
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            break;
+        }
+      }
+    }
+
+    return createdTasks.length > 0;
+  };
+
   const loadTasks = async (userId: string) => {
     setLoading(true);
     try {
@@ -64,9 +197,21 @@ export default function Dashboard() {
         loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
       });
 
+      // Generate missing repeating task occurrences
+      const hasNewOccurrences = await generateMissingRepeatingOccurrences(loadedTasks, userId);
+      
+      // Reload tasks if new occurrences were created
+      if (hasNewOccurrences) {
+        const updatedSnapshot = await getDocs(q);
+        loadedTasks.length = 0; // Clear array
+        updatedSnapshot.forEach((doc) => {
+          loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+        });
+      }
+
       setTasks(loadedTasks);
 
-      // Filter today's tasks - only show tasks with startDate exactly equal to today
+      // Filter today's tasks - include repeating tasks even if previous day wasn't completed
       const today = new Date().toISOString().split('T')[0];
       const todayTasks = loadedTasks.filter(task => {
         if (!task.startDate) return false;
@@ -133,32 +278,6 @@ export default function Dashboard() {
     }
   };
 
-  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
-    const date = new Date(currentDate);
-    switch (frequency) {
-      case 'daily':
-        date.setDate(date.getDate() + 1);
-        break;
-      case 'weekly':
-        date.setDate(date.getDate() + 7);
-        break;
-      case 'monthly':
-        date.setMonth(date.getMonth() + 1);
-        break;
-    }
-    return date.toISOString().split('T')[0];
-  };
-
-  const shouldCreateNextOccurrence = (task: Task): boolean => {
-    if (!task.isRepeating || !task.repeatFrequency) return false;
-    if (task.repeatEndDate) {
-      const endDate = new Date(task.repeatEndDate);
-      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
-      return nextDate <= endDate;
-    }
-    return true; // No end date, repeat indefinitely
-  };
-
   const handleToggleComplete = async (task: Task) => {
     try {
       const db = getFirestore();
@@ -216,12 +335,66 @@ export default function Dashboard() {
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   // Get pending tasks from past days (not today, not completed, not ignored)
+  // Also include repeating tasks that should have had occurrences in past days
   const today = new Date().toISOString().split('T')[0];
   const pastPendingTasks = tasks.filter(t => {
     if (t.status === 'completed' || t.completed) return false;
     if ((t as any).ignored) return false; // Exclude ignored tasks
     if (!t.startDate) return false;
-    return t.startDate < today;
+    
+    const taskDate = t.startDate.split('T')[0];
+    
+    // Include tasks from past days
+    if (taskDate < today) return true;
+    
+    // For repeating tasks, check if there should be past occurrences
+    if (t.isRepeating && t.repeatFrequency) {
+      const originalDate = new Date(t.startDate);
+      const todayDate = new Date(today);
+      
+      // Check if there are missing occurrences between original date and today
+      let checkDate = new Date(originalDate);
+      checkDate.setDate(checkDate.getDate() + 1); // Start from day after original
+      
+      while (checkDate < todayDate) {
+        const checkDateStr = checkDate.toISOString().split('T')[0];
+        
+        // Check if this occurrence exists
+        const occurrenceExists = tasks.some(existingTask => 
+          existingTask.isRepeating === t.isRepeating &&
+          existingTask.repeatFrequency === t.repeatFrequency &&
+          existingTask.startDate === checkDateStr &&
+          existingTask.title === t.title &&
+          existingTask.userId === t.userId &&
+          (existingTask.status !== 'completed' && !existingTask.completed)
+        );
+        
+        // If occurrence is missing and not completed, it should be in pending
+        if (!occurrenceExists) {
+          // Check if within repeat end date
+          if (t.repeatEndDate) {
+            const endDate = new Date(t.repeatEndDate);
+            if (checkDate > endDate) break;
+          }
+          return true; // This repeating task has missing pending occurrences
+        }
+        
+        // Move to next occurrence
+        switch (t.repeatFrequency) {
+          case 'daily':
+            checkDate.setDate(checkDate.getDate() + 1);
+            break;
+          case 'weekly':
+            checkDate.setDate(checkDate.getDate() + 7);
+            break;
+          case 'monthly':
+            checkDate.setMonth(checkDate.getMonth() + 1);
+            break;
+        }
+      }
+    }
+    
+    return false;
   });
 
   const formatDateTime = (date: string, time?: string) => {

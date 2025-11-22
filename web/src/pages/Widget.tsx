@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 interface Task {
@@ -13,6 +13,10 @@ interface Task {
   completed: boolean;
   priority: 'low' | 'medium' | 'high';
   tags: string[];
+  isRepeating?: boolean;
+  repeatFrequency?: 'daily' | 'weekly' | 'monthly';
+  repeatEndDate?: string;
+  userId?: string;
 }
 
 export default function Widget() {
@@ -61,9 +65,14 @@ export default function Widget() {
         loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
       });
 
-      // Filter today's tasks
+      // Filter today's tasks - only show tasks with startDate exactly equal to today
       const today = new Date().toISOString().split('T')[0];
-      const todayTasks = loadedTasks.filter(task => task.startDate === today);
+      const todayTasks = loadedTasks.filter(task => {
+        if (!task.startDate) return false;
+        // Ensure we're comparing dates correctly (YYYY-MM-DD format)
+        const taskDate = task.startDate.split('T')[0]; // Handle any time component
+        return taskDate === today;
+      });
 
       // Sort by priority (high first) then by completion status (active first)
       const sortedTasks = todayTasks.sort((a, b) => {
@@ -85,6 +94,32 @@ export default function Widget() {
     }
   };
 
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
   const handleToggleComplete = async (task: Task) => {
     try {
       const db = getFirestore();
@@ -99,6 +134,33 @@ export default function Widget() {
         completedAt: newCompleted ? new Date() : null,
         updatedAt: new Date()
       });
+
+      // If task is being marked as complete and is repeating, create next occurrence
+      if (newCompleted && shouldCreateNextOccurrence(task) && task.userId) {
+        const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Only create if next occurrence is in the future or today
+        if (nextDate >= today) {
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: nextDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          await addDoc(collection(db, 'tasks'), nextTaskData);
+        }
+      }
 
       // Reload tasks
       if (user) {

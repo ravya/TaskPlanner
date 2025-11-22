@@ -49,7 +49,7 @@
       "port": 8080
     },
     "hosting": {
-      "port": 3000
+      "port": 3002
     },
     "ui": {
       "enabled": true,

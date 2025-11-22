@@ -17,6 +17,7 @@ interface Task {
   repeatEndDate?: string;
   userId: string;
   createdAt: any;
+  completed?: boolean;
 }
 
 export default function Tasks() {
@@ -165,18 +166,78 @@ export default function Tasks() {
     }, 100);
   };
 
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
   const handleToggleComplete = async (task: Task) => {
     try {
       const db = getFirestore();
       const taskRef = doc(db, 'tasks', task.id);
       const newStatus = task.status === 'completed' ? 'todo' : 'completed';
-      await updateDoc(taskRef, { status: newStatus });
+
+      await updateDoc(taskRef, {
+        status: newStatus,
+        completed: newStatus === 'completed',
+        completedAt: newStatus === 'completed' ? new Date() : null,
+        updatedAt: new Date()
+      });
+
+      // If task is being marked as complete and is repeating, create next occurrence
+      if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
+        const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Only create if next occurrence is in the future or today
+        if (nextDate >= today) {
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: nextDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          await addDoc(collection(db, 'tasks'), nextTaskData);
+        }
+      }
 
       if (user) {
         loadTasks(user.uid);
       }
     } catch (error) {
       console.error('Error toggling task:', error);
+      alert('Failed to update task');
     }
   };
 

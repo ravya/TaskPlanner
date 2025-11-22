@@ -1,7 +1,7 @@
 import { getAuth, signOut } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 
 interface Task {
   id: string;
@@ -17,6 +17,7 @@ interface Task {
   repeatEndDate?: string;
   userId: string;
   createdAt: any;
+  completed?: boolean;
 }
 
 export default function Dashboard() {
@@ -65,13 +66,13 @@ export default function Dashboard() {
 
       setTasks(loadedTasks);
 
-      // Filter today's tasks
+      // Filter today's tasks - only show tasks with startDate exactly equal to today
       const today = new Date().toISOString().split('T')[0];
       const todayTasks = loadedTasks.filter(task => {
-        if (task.startDate) {
-          return task.startDate === today;
-        }
-        return false;
+        if (!task.startDate) return false;
+        // Ensure we're comparing dates correctly (YYYY-MM-DD format)
+        const taskDate = task.startDate.split('T')[0]; // Handle any time component
+        return taskDate === today;
       });
       setTodaysTasks(todayTasks);
     } catch (error) {
@@ -129,6 +130,82 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error ignoring task:', error);
       alert('Failed to ignore task');
+    }
+  };
+
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
+  const handleToggleComplete = async (task: Task) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', task.id);
+      const newStatus = task.status === 'completed' ? 'todo' : 'completed';
+
+      await updateDoc(taskRef, {
+        status: newStatus,
+        completed: newStatus === 'completed',
+        completedAt: newStatus === 'completed' ? new Date() : null,
+        updatedAt: new Date()
+      });
+
+      // If task is being marked as complete and is repeating, create next occurrence
+      if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
+        const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Only create if next occurrence is in the future or today
+        if (nextDate >= today) {
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: nextDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          await addDoc(collection(db, 'tasks'), nextTaskData);
+        }
+      }
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error toggling task:', error);
+      alert('Failed to update task');
     }
   };
 
@@ -402,13 +479,13 @@ export default function Dashboard() {
                 <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
                   <input
                     type="checkbox"
-                    checked={task.status === 'completed'}
-                    disabled
-                    className="h-5 w-5 text-blue-600 rounded"
+                    checked={task.status === 'completed' || task.completed === true}
+                    onChange={() => handleToggleComplete(task)}
+                    className="h-5 w-5 text-blue-600 rounded cursor-pointer"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className={`text-base font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                      <h3 className={`text-base font-medium ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                         {task.title}
                       </h3>
                       <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
@@ -416,7 +493,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     {task.description && (
-                      <p className={`text-sm mt-1 ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <p className={`text-sm mt-1 ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
                         {task.description}
                       </p>
                     )}

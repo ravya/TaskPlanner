@@ -24,7 +24,10 @@
     "lint": "npm run lint --workspaces",
     "lint:web": "npm run lint --workspace=web",
     "preview": "npm run preview --workspace=web",
-    "setup": "npm install && npm install --workspaces"
+    "setup": "npm install && npm install --workspaces",
+    "deploy:local": "npm run build:web && npm run preview --workspace=web",
+    "build:prod": "npm run build:web",
+    "deploy:prod": "firebase deploy --only hosting"
   },
   "keywords": [
     "taskflow",

@@ -91,7 +91,8 @@ export default function Dashboard() {
 
   const generateMissingRepeatingOccurrences = async (tasks: Task[], userId: string) => {
     const db = getFirestore();
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const createdTasks: string[] = [];
 
     for (const task of tasks) {
@@ -224,7 +225,9 @@ export default function Dashboard() {
       setTasks(loadedTasks);
 
       // Filter today's tasks - include repeating tasks even if previous day wasn't completed
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const todayTasks = loadedTasks.filter(task => {
         if (!task.startDate) return false;
         // Ensure we're comparing dates correctly (YYYY-MM-DD format)
@@ -253,7 +256,8 @@ export default function Dashboard() {
     try {
       const db = getFirestore();
       const taskRef = doc(db, 'tasks', taskId);
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       await updateDoc(taskRef, {
         startDate: today,
@@ -293,7 +297,8 @@ export default function Dashboard() {
   const handleCreateMissingOccurrence = async (task: Task) => {
     try {
       const db = getFirestore();
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       const taskData = {
         title: task.title,
@@ -346,7 +351,9 @@ export default function Dashboard() {
         .filter(tag => tag.length > 0);
 
       // Use today's date if startDate is not set
-      const taskStartDate = formData.startDate || new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const taskStartDate = formData.startDate || today;
 
       const taskData = {
         title: formData.title,
@@ -403,7 +410,8 @@ export default function Dashboard() {
       // If task is being marked as complete and is repeating, create next occurrence
       if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
-        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
@@ -445,7 +453,8 @@ export default function Dashboard() {
 
   // Get pending tasks from past days (not today, not completed, not ignored)
   // This includes both regular tasks and missing repeating task occurrences
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const pastPendingTasks: Task[] = [];
 
   // First, add regular tasks from past days
@@ -776,7 +785,7 @@ export default function Dashboard() {
 
           {/* Today's Tasks */}
           <Link
-            to="/tasks"
+            to="/tasks?filter=today"
             className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
           >
             <div className="flex items-center justify-between mb-4">
@@ -876,7 +885,7 @@ export default function Dashboard() {
           <div className="p-6 border-b border-gray-200 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Today's Tasks</h2>
             <Link
-              to="/tasks"
+              to="/tasks?filter=today"
               className="text-sm text-blue-600 hover:text-blue-700 font-medium"
             >
               View all tasks →

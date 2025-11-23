@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 
 interface Task {
   id: string;
@@ -22,6 +22,7 @@ interface Task {
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const formRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,14 +31,26 @@ export default function Tasks() {
   const [user, setUser] = useState<any>(null);
   const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>(
+    (searchParams.get('filter') as any) || 'all'
+  );
   const [customDateStart, setCustomDateStart] = useState<string>('');
   const [customDateEnd, setCustomDateEnd] = useState<string>('');
+
+  useEffect(() => {
+    const filterParam = searchParams.get('filter');
+    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom'].includes(filterParam)) {
+      setDateFilter(filterParam as any);
+    }
+  }, [searchParams]);
 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    startDate: new Date().toISOString().split('T')[0], // Default to today
+    startDate: (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    })(), // Default to today
     startTime: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     tags: '',
@@ -97,7 +110,9 @@ export default function Tasks() {
         .filter(tag => tag.length > 0);
 
       // Use today's date if startDate is not set
-      const taskStartDate = formData.startDate || new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const taskStartDate = formData.startDate || today;
 
       const taskData = {
         title: formData.title,
@@ -132,7 +147,7 @@ export default function Tasks() {
       setFormData({
         title: '',
         description: '',
-        startDate: new Date().toISOString().split('T')[0], // Default to today
+        startDate: today, // Default to today
         startTime: '',
         priority: 'medium',
         tags: '',
@@ -152,11 +167,14 @@ export default function Tasks() {
   };
 
   const handleEditTask = (task: Task) => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     setEditingTask(task);
     setFormData({
       title: task.title,
       description: task.description || '',
-      startDate: task.startDate || new Date().toISOString().split('T')[0], // Default to today if not set
+      startDate: task.startDate || today, // Default to today if not set
       startTime: task.startTime || '',
       priority: task.priority,
       tags: task.tags ? task.tags.join(', ') : '',
@@ -214,7 +232,8 @@ export default function Tasks() {
       // If task is being marked as complete and is repeating, create next occurrence
       if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
-        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
@@ -248,8 +267,34 @@ export default function Tasks() {
   };
 
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ show: boolean; taskId: string | null }>({
+    show: false,
+    taskId: null
+  });
+
+  // ... (existing useEffect)
+
+  // ... (existing loadTasks)
+
+  // ... (existing handleAddTask)
+
+  // ... (existing handleEditTask)
+
+  // ... (existing getNextOccurrenceDate)
+
+  // ... (existing shouldCreateNextOccurrence)
+
+  // ... (existing handleToggleComplete)
+
+  const confirmDeleteTask = (taskId: string) => {
+    setDeleteConfirmation({ show: true, taskId });
+  };
+
+  const handleDeleteTask = async () => {
+    if (!deleteConfirmation.taskId) return;
+
+    const taskId = deleteConfirmation.taskId;
+    setDeleteConfirmation({ show: false, taskId: null });
 
     try {
       const db = getFirestore();
@@ -262,6 +307,7 @@ export default function Tasks() {
       }
     } catch (error) {
       console.error('Error deleting task:', error);
+      alert('Failed to delete task');
     }
   };
 
@@ -311,6 +357,38 @@ export default function Tasks() {
       filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
     } else if (statusFilter === 'completed') {
       filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
+    }
+
+    // Filter by date
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      filteredTasks = filteredTasks.filter(task => {
+        if (!task.startDate) return false;
+        const taskDate = task.startDate.split('T')[0];
+
+        if (dateFilter === 'today') {
+          return taskDate === today;
+        } else if (dateFilter === 'thisWeek') {
+          const taskDateObj = new Date(taskDate);
+          const todayObj = new Date(today);
+          const firstDayOfWeek = new Date(todayObj);
+          firstDayOfWeek.setDate(todayObj.getDate() - todayObj.getDay()); // Sunday
+          const lastDayOfWeek = new Date(todayObj);
+          lastDayOfWeek.setDate(todayObj.getDate() + (6 - todayObj.getDay())); // Saturday
+          return taskDateObj >= firstDayOfWeek && taskDateObj <= lastDayOfWeek;
+        } else if (dateFilter === 'thisMonth') {
+          const taskDateObj = new Date(taskDate);
+          const todayObj = new Date(today);
+          return taskDateObj.getMonth() === todayObj.getMonth() && taskDateObj.getFullYear() === todayObj.getFullYear();
+        } else if (dateFilter === 'custom') {
+          if (customDateStart && taskDate < customDateStart) return false;
+          if (customDateEnd && taskDate > customDateEnd) return false;
+          return true;
+        }
+        return true;
+      });
     }
 
     // Separate completed and active tasks
@@ -387,11 +465,9 @@ export default function Tasks() {
 
   const sortedTasks = getFilteredAndSortedTasks();
 
-
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ... (Header) ... */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
@@ -446,6 +522,7 @@ export default function Tasks() {
               {editingTask ? 'Edit Task' : 'Create New Task'}
             </h2>
             <form onSubmit={handleAddTask} className="space-y-4">
+              {/* ... (Form fields) ... */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Task Title *
@@ -615,8 +692,8 @@ export default function Tasks() {
               <button
                 onClick={() => setStatusFilter('all')}
                 className={`px-4 py-2 font-medium text-sm ${statusFilter === 'all'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 All ({tasks.length})
@@ -624,8 +701,8 @@ export default function Tasks() {
               <button
                 onClick={() => setStatusFilter('active')}
                 className={`px-4 py-2 font-medium text-sm ${statusFilter === 'active'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})
@@ -633,8 +710,8 @@ export default function Tasks() {
               <button
                 onClick={() => setStatusFilter('completed')}
                 className={`px-4 py-2 font-medium text-sm ${statusFilter === 'completed'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
                   }`}
               >
                 Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})
@@ -777,7 +854,7 @@ export default function Tasks() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDeleteTask(task.id)}
+                      onClick={() => confirmDeleteTask(task.id)}
                       className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
                     >
                       Delete
@@ -789,6 +866,32 @@ export default function Tasks() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmation({ show: false, taskId: null })}>
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Task</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this task? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirmation({ show: false, taskId: null })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteTask}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

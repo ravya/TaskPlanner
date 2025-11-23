@@ -121,11 +121,11 @@ export enum ReminderType {
 
 // Task label
 export interface TaskLabel {
-  id: string;
+  id?: string;
   name: string;
   color: string;
-  createdBy: string;
-  createdAt: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 // Task metadata
@@ -133,9 +133,9 @@ export interface TaskMetadata {
   source: 'web' | 'mobile' | 'api' | 'email' | 'integration';
   version: number;
   lastModifiedBy: string;
-  timeTracking: TaskTimeTracking;
-  automation: TaskAutomation;
-  customFields: Record<string, any>;
+  timeTracking?: TaskTimeTracking;
+  automation?: TaskAutomation;
+  customFields?: Record<string, any>;
 }
 
 // Task time tracking
@@ -251,12 +251,12 @@ export interface TaskSortOptions {
 
 // Task sort fields
 export enum TaskSortField {
-  TITLE = 'title',
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',
   DUE_DATE = 'dueDate',
   PRIORITY = 'priority',
   STATUS = 'status',
+  TITLE = 'title',
   PROGRESS = 'progress',
   POSITION = 'position',
 }
@@ -311,6 +311,8 @@ export interface TaskStatistics {
     today: number;
     thisWeek: number;
     thisMonth: number;
+    averageTasksPerWeek?: number;
+    streakDays?: number;
   };
 }
 
@@ -495,4 +497,39 @@ export interface TaskAnalytics {
     mostProductiveHour: number;
     mostProductiveDay: string;
   };
+}
+
+// Input types for service methods
+export interface CreateTaskInput extends Omit<TaskFormData, 'attachments' | 'labels'> {
+  attachments?: string[]; // URLs or IDs
+  labels?: TaskLabel[];
+  assignedBy?: string;
+  progress?: number;
+  reminders?: TaskReminder[];
+  metadata?: Partial<TaskMetadata>;
+  parentTaskId?: string;
+  position?: number;
+  boardId?: string;
+  listId?: string;
+}
+
+export interface UpdateTaskInput extends Omit<TaskUpdateData, 'attachments' | 'labels'> {
+  attachments?: string[];
+  labels?: TaskLabel[];
+  assignedBy?: string;
+  reminders?: TaskReminder[];
+  metadata?: Partial<TaskMetadata>;
+  parentTaskId?: string;
+  position?: number;
+  boardId?: string;
+  listId?: string;
+}
+
+export interface BulkUpdateInput {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  assignedTo?: string;
+  isArchived?: boolean;
+  isDeleted?: boolean;
+  tags?: string[];
 }

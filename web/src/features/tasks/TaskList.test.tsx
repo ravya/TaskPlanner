@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@/test/testUtils';
+import { render, screen, fireEvent } from '@/test/testUtils';
 import { mockTasks, mockUser } from '@/test/mockData';
 
 // Mock the hooks

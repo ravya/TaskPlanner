@@ -98,9 +98,9 @@ export default function Dashboard() {
       // Only process the original repeating task (not occurrences)
       // Original tasks are those that match the original startDate
       if (!task.isRepeating || !task.repeatFrequency || !task.startDate) continue;
-      
+
       // Skip if this is already an occurrence (check if there's a task with earlier date and same title)
-      const isOriginalTask = !tasks.some(t => 
+      const isOriginalTask = !tasks.some(t =>
         t.id !== task.id &&
         t.isRepeating === task.isRepeating &&
         t.repeatFrequency === task.repeatFrequency &&
@@ -108,7 +108,7 @@ export default function Dashboard() {
         t.userId === task.userId &&
         t.startDate < task.startDate
       );
-      
+
       if (!isOriginalTask) continue; // Skip occurrences, only process originals
 
       // Check if we should create occurrences for this repeating task
@@ -116,16 +116,16 @@ export default function Dashboard() {
 
       const originalDate = new Date(task.startDate);
       const todayDate = new Date(today);
-      
+
       // Generate occurrences from original date up to today
       let currentDate = new Date(originalDate);
       currentDate.setDate(currentDate.getDate() + 1); // Start from day after original
 
       while (currentDate <= todayDate) {
         const occurrenceDate = currentDate.toISOString().split('T')[0];
-        
+
         // Check if occurrence already exists in current tasks list
-        const existingTask = tasks.find(t => 
+        const existingTask = tasks.find(t =>
           t.title === task.title &&
           t.startDate === occurrenceDate &&
           t.userId === task.userId &&
@@ -144,7 +144,7 @@ export default function Dashboard() {
             where('repeatFrequency', '==', task.repeatFrequency)
           );
           const checkSnapshot = await getDocs(checkQuery);
-          
+
           if (checkSnapshot.empty) {
             // Check if we're within the repeat end date
             if (task.repeatEndDate) {
@@ -211,7 +211,7 @@ export default function Dashboard() {
 
       // Generate missing repeating task occurrences
       const hasNewOccurrences = await generateMissingRepeatingOccurrences(loadedTasks, userId);
-      
+
       // Reload tasks if new occurrences were created
       if (hasNewOccurrences) {
         const updatedSnapshot = await getDocs(q);
@@ -404,7 +404,7 @@ export default function Dashboard() {
       if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
           const nextTaskData = {
@@ -447,111 +447,26 @@ export default function Dashboard() {
   // This includes both regular tasks and missing repeating task occurrences
   const today = new Date().toISOString().split('T')[0];
   const pastPendingTasks: Task[] = [];
-  
+
   // First, add regular tasks from past days
   tasks.forEach(t => {
     if (t.status === 'completed' || t.completed) return;
     if ((t as any).ignored) return;
     if (!t.startDate) return;
-    
+
+    // Exclude repetitive tasks from past pending list as requested
+    if (t.isRepeating) return;
+
     const taskDate = t.startDate.split('T')[0];
     if (taskDate < today) {
       pastPendingTasks.push(t);
     }
   });
-  
-  // Then, find missing repeating task occurrences from past days
-  tasks.forEach(t => {
-    if (!t.isRepeating || !t.repeatFrequency || !t.startDate) return;
-    if (t.status === 'completed' || t.completed) return;
-    
-    // Only process original repeating tasks
-    const isOriginalTask = !tasks.some(otherTask => 
-      otherTask.id !== t.id &&
-      otherTask.isRepeating === t.isRepeating &&
-      otherTask.repeatFrequency === t.repeatFrequency &&
-      otherTask.title === t.title &&
-      otherTask.userId === t.userId &&
-      otherTask.startDate < t.startDate
-    );
-    
-    if (!isOriginalTask) return;
-    
-    const originalDate = new Date(t.startDate);
-    const todayDate = new Date(today);
-    
-    // Check for missing occurrences from past days
-    let checkDate = new Date(originalDate);
-    checkDate.setDate(checkDate.getDate() + 1); // Start from day after original
-    
-    while (checkDate < todayDate) {
-      const checkDateStr = checkDate.toISOString().split('T')[0];
-      
-      // Check if this occurrence exists
-      const occurrenceExists = tasks.some(existingTask => 
-        existingTask.title === t.title &&
-        existingTask.startDate === checkDateStr &&
-        existingTask.userId === t.userId &&
-        existingTask.isRepeating === t.isRepeating &&
-        existingTask.repeatFrequency === t.repeatFrequency
-      );
-      
-      // If occurrence is missing, create a virtual task for pending section
-      if (!occurrenceExists) {
-        // Check if within repeat end date
-        if (t.repeatEndDate) {
-          const endDate = new Date(t.repeatEndDate);
-          if (checkDate > endDate) break;
-        }
-        
-        // Create a virtual task object for the missing occurrence
-        const missingOccurrence: Task = {
-          id: `missing-${t.id}-${checkDateStr}`,
-          title: t.title,
-          description: t.description,
-          startDate: checkDateStr,
-          startTime: t.startTime,
-          status: 'todo',
-          priority: t.priority,
-          tags: t.tags || [],
-          isRepeating: t.isRepeating,
-          repeatFrequency: t.repeatFrequency,
-          repeatEndDate: t.repeatEndDate,
-          userId: t.userId,
-          createdAt: t.createdAt,
-          completed: false
-        };
-        
-        // Check if not already in pastPendingTasks
-        if (!pastPendingTasks.some(pt => pt.id === missingOccurrence.id)) {
-          pastPendingTasks.push(missingOccurrence);
-        }
-      }
-      
-      // Move to next occurrence
-      switch (t.repeatFrequency) {
-        case 'daily':
-          checkDate.setDate(checkDate.getDate() + 1);
-          break;
-        case 'weekly':
-          checkDate.setDate(checkDate.getDate() + 7);
-          break;
-        case 'monthly':
-          checkDate.setMonth(checkDate.getMonth() + 1);
-          break;
-      }
-    }
-  });
 
-  const formatDateTime = (date: string, time?: string) => {
-    if (!date) return '';
-    const dateObj = new Date(date);
-    const dateStr = dateObj.toLocaleDateString();
-    if (time) {
-      return `${dateStr} ${time}`;
-    }
-    return dateStr;
-  };
+  // Note: Logic for finding missing repeating task occurrences has been removed
+  // as per requirement to not show past pending repetitive tasks.
+
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {

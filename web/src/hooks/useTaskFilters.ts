@@ -1,13 +1,15 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useUIStore } from '../store/slices/uiSlice';
-import type {
-  TaskFilters,
+import { useState, useCallback, useMemo, useEffect } from 'react';
+
+import {
   TaskStatus,
   TaskPriority,
-  TaskSortOptions,
   TaskSortField,
   TaskView,
   TaskGroupBy,
+} from '../types/task';
+import type {
+  TaskFilters,
+  TaskSortOptions,
 } from '../types/task';
 
 export interface UseTaskFiltersOptions {
@@ -24,21 +26,21 @@ export interface UseTaskFiltersReturn {
   sortBy: TaskSortOptions;
   view: TaskView;
   groupBy: TaskGroupBy;
-  
+
   // Filter actions
   setFilter: (key: keyof TaskFilters, value: any) => void;
   updateFilters: (newFilters: Partial<TaskFilters>) => void;
   clearFilters: () => void;
   resetFilters: () => void;
-  
+
   // Sort actions
   setSortBy: (field: TaskSortField, direction?: 'asc' | 'desc') => void;
   toggleSortDirection: () => void;
-  
+
   // View actions
   setView: (view: TaskView) => void;
   setGroupBy: (groupBy: TaskGroupBy) => void;
-  
+
   // Quick filters
   setStatusFilter: (statuses: TaskStatus[]) => void;
   setPriorityFilter: (priorities: TaskPriority[]) => void;
@@ -46,13 +48,13 @@ export interface UseTaskFiltersReturn {
   setTagFilter: (tags: string[]) => void;
   setSearchFilter: (search: string) => void;
   setDateRangeFilter: (field: 'dueDate' | 'createdAt' | 'completedAt', start?: string, end?: string) => void;
-  
+
   // Computed values
   hasActiveFilters: boolean;
   filterCount: number;
   isFilterActive: (key: keyof TaskFilters) => boolean;
   getFilterValue: <K extends keyof TaskFilters>(key: K) => TaskFilters[K];
-  
+
   // Presets
   applyPreset: (preset: FilterPreset) => void;
   savePreset: (name: string) => void;
@@ -112,7 +114,7 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
   // Load persisted data
   const loadPersistedData = useCallback(() => {
     if (!persistKey) return { filters: initialFilters, sort: initialSort };
-    
+
     try {
       const stored = localStorage.getItem(`${STORAGE_KEYS.FILTERS}_${persistKey}`);
       if (stored) {
@@ -127,12 +129,12 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
     } catch (error) {
       console.error('Failed to load persisted filters:', error);
     }
-    
-    return { 
-      filters: initialFilters, 
-      sort: initialSort, 
-      view: initialView, 
-      groupBy: initialGroupBy 
+
+    return {
+      filters: initialFilters,
+      sort: initialSort,
+      view: initialView,
+      groupBy: initialGroupBy
     };
   }, [persistKey, initialFilters, initialSort, initialView, initialGroupBy]);
 
@@ -155,7 +157,7 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
   // Persist data to localStorage
   const persistData = useCallback(() => {
     if (!persistKey) return;
-    
+
     try {
       const dataToStore = {
         filters,
@@ -171,7 +173,7 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
   }, [persistKey, filters, sortBy, view, groupBy]);
 
   // Auto-persist when data changes
-  React.useEffect(() => {
+  useEffect(() => {
     persistData();
   }, [persistData]);
 
@@ -309,7 +311,7 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
 
     const updatedPresets = [...presets, newPreset];
     setPresets(updatedPresets);
-    
+
     try {
       localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(updatedPresets));
     } catch (error) {
@@ -320,7 +322,7 @@ export const useTaskFilters = (options: UseTaskFiltersOptions = {}): UseTaskFilt
   const deletePreset = useCallback((presetId: string) => {
     const updatedPresets = presets.filter(p => p.id !== presetId);
     setPresets(updatedPresets);
-    
+
     try {
       localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(updatedPresets));
     } catch (error) {

@@ -24,9 +24,6 @@ export const useGoogleAuth = (options: UseGoogleAuthOptions = {}): UseGoogleAuth
   const {
     onSuccess,
     onError,
-    redirectTo,
-    prompt = 'select_account',
-    scopes = ['email', 'profile'],
   } = options;
 
   const { loginWithGoogle, user, updateProfile } = useAuth();
@@ -44,7 +41,7 @@ export const useGoogleAuth = (options: UseGoogleAuthOptions = {}): UseGoogleAuth
 
     try {
       await loginWithGoogle();
-      
+
       // Get the updated user after login
       if (onSuccess && user) {
         onSuccess(user);
@@ -66,7 +63,7 @@ export const useGoogleAuth = (options: UseGoogleAuthOptions = {}): UseGoogleAuth
 
     try {
       await loginWithGoogle();
-      
+
       if (onSuccess && user) {
         onSuccess(user);
       }
@@ -96,7 +93,7 @@ export const useGoogleAuth = (options: UseGoogleAuthOptions = {}): UseGoogleAuth
       // This would require additional Firebase Auth linking functionality
       // For now, we'll simulate the process
       console.log('Linking Google account for user:', user.uid);
-      
+
       // Update user profile to indicate Google is linked
       await updateProfile({
         provider: 'google',
@@ -138,7 +135,7 @@ export const useGoogleAuth = (options: UseGoogleAuthOptions = {}): UseGoogleAuth
       // This would require additional Firebase Auth unlinking functionality
       // For now, we'll simulate the process
       console.log('Unlinking Google account for user:', user.uid);
-      
+
       // Update user profile to remove Google provider
       await updateProfile({
         provider: 'email',

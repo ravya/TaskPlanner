@@ -1,21 +1,16 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { QueryClientProvider } from '@tanstack/react-query';
+
 import React from 'react';
 import { queryClient } from '../index';
 
 // Query client context and provider setup
-export const QueryProvider: React.FC<{ children: React.ReactNode }> = ({ 
-  children 
+export const QueryProvider: React.FC<{ children: React.ReactNode }> = ({
+  children
 }) => {
   return React.createElement(
     QueryClientProvider,
     { client: queryClient },
-    children,
-    // Show devtools only in development
-    import.meta.env.DEV && React.createElement(ReactQueryDevtools, {
-      initialIsOpen: false,
-      position: 'bottom-right',
-    })
+    children
   );
 };
 
@@ -52,7 +47,7 @@ export const handleQueryError = (error: any): string => {
   if (error?.message) {
     return error.message;
   }
-  
+
   if (error?.code) {
     const errorMessages: Record<string, string> = {
       'permission-denied': 'You do not have permission to access this data',
@@ -61,10 +56,10 @@ export const handleQueryError = (error: any): string => {
       'unauthenticated': 'Please sign in to continue',
       'network-error': 'Network connection error',
     };
-    
+
     return errorMessages[error.code] || 'An unexpected error occurred';
   }
-  
+
   return 'An unexpected error occurred';
 };
 
@@ -76,31 +71,31 @@ export const invalidateQueries = {
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats', userId] });
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'recent-tasks', userId] });
   },
-  
+
   // Invalidate specific task queries
   task: (taskId: string) => {
     queryClient.invalidateQueries({ queryKey: ['tasks', 'detail', taskId] });
     queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
   },
-  
+
   // Invalidate all tag-related queries
-  tags: (userId: string) => {
+  tags: () => {
     queryClient.invalidateQueries({ queryKey: ['tags'] });
     queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Tasks contain tags
   },
-  
+
   // Invalidate user-related queries
   user: (userId: string) => {
     queryClient.invalidateQueries({ queryKey: ['users', 'preferences', userId] });
     queryClient.invalidateQueries({ queryKey: ['users', 'profile', userId] });
   },
-  
+
   // Invalidate dashboard queries
   dashboard: (userId: string) => {
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats', userId] });
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'recent-tasks', userId] });
   },
-  
+
   // Invalidate all queries for a user
   allUserData: (userId: string) => {
     queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -117,7 +112,7 @@ export const cacheUtils = {
   clearAll: () => {
     queryClient.clear();
   },
-  
+
   // Clear cache for a specific user
   clearUserCache: (userId: string) => {
     queryClient.removeQueries({ queryKey: ['tasks'] });
@@ -126,7 +121,7 @@ export const cacheUtils = {
     queryClient.removeQueries({ queryKey: ['users', 'preferences', userId] });
     queryClient.removeQueries({ queryKey: ['notifications'] });
   },
-  
+
   // Prefetch common data
   prefetchUserData: async (userId: string) => {
     // Prefetch tasks
@@ -134,43 +129,43 @@ export const cacheUtils = {
       queryKey: ['tasks', 'list', { userId }],
       staleTime: commonQueryOptions.staleTime,
     });
-    
+
     // Prefetch tags
     queryClient.prefetchQuery({
       queryKey: ['tags', 'list', userId],
       staleTime: commonQueryOptions.staleTime,
     });
-    
+
     // Prefetch dashboard stats
     queryClient.prefetchQuery({
       queryKey: ['dashboard', 'stats', userId],
       staleTime: commonQueryOptions.staleTime,
     });
   },
-  
+
   // Get cached data without triggering a request
   getCachedTasks: (userId: string, filters?: any) => {
     return queryClient.getQueryData(['tasks', 'list', { userId, ...filters }]);
   },
-  
+
   getCachedTask: (taskId: string) => {
     return queryClient.getQueryData(['tasks', 'detail', taskId]);
   },
-  
+
   getCachedTags: (userId: string) => {
     return queryClient.getQueryData(['tags', 'list', userId]);
   },
-  
+
   // Set cached data manually
   setCachedTask: (taskId: string, task: any) => {
     queryClient.setQueryData(['tasks', 'detail', taskId], task);
-    
+
     // Also update the task in lists
     const listQueries = queryClient.getQueryCache().findAll({
       queryKey: ['tasks', 'list'],
       type: 'active',
     });
-    
+
     listQueries.forEach((query) => {
       const currentData = query.state.data as any;
       if (currentData?.data) {
@@ -192,27 +187,27 @@ export const optimisticUpdates = {
     queryClient.setQueryData(['tasks', 'detail', taskId], (old: any) => {
       return old ? { ...old, ...updates } : null;
     });
-    
+
     // Update task in lists
     const listQueries = queryClient.getQueryCache().findAll({
       queryKey: ['tasks', 'list'],
       type: 'active',
     });
-    
+
     listQueries.forEach((query) => {
       queryClient.setQueryData(query.queryKey, (old: any) => {
         if (!old?.data) return old;
-        
+
         return {
           ...old,
-          data: old.data.map((task: any) => 
+          data: old.data.map((task: any) =>
             task.id === taskId ? { ...task, ...updates } : task
           ),
         };
       });
     });
   },
-  
+
   // Optimistically add a new task
   addTask: (task: any) => {
     // Add to all matching task lists
@@ -220,11 +215,11 @@ export const optimisticUpdates = {
       queryKey: ['tasks', 'list'],
       type: 'active',
     });
-    
+
     listQueries.forEach((query) => {
       queryClient.setQueryData(query.queryKey, (old: any) => {
         if (!old?.data) return old;
-        
+
         return {
           ...old,
           data: [task, ...old.data],
@@ -233,22 +228,22 @@ export const optimisticUpdates = {
       });
     });
   },
-  
+
   // Optimistically remove a task
   removeTask: (taskId: string) => {
     // Remove from task detail
     queryClient.removeQueries({ queryKey: ['tasks', 'detail', taskId] });
-    
+
     // Remove from task lists
     const listQueries = queryClient.getQueryCache().findAll({
       queryKey: ['tasks', 'list'],
       type: 'active',
     });
-    
+
     listQueries.forEach((query) => {
       queryClient.setQueryData(query.queryKey, (old: any) => {
         if (!old?.data) return old;
-        
+
         return {
           ...old,
           data: old.data.filter((task: any) => task.id !== taskId),
@@ -265,21 +260,21 @@ export const backgroundRefetch = {
   refetchAll: () => {
     queryClient.refetchQueries({ type: 'active' });
   },
-  
+
   // Refetch specific query types
   refetchTasks: () => {
     queryClient.refetchQueries({ queryKey: ['tasks'] });
   },
-  
+
   refetchTags: () => {
     queryClient.refetchQueries({ queryKey: ['tags'] });
   },
-  
+
   refetchDashboard: (userId: string) => {
     queryClient.refetchQueries({ queryKey: ['dashboard', 'stats', userId] });
     queryClient.refetchQueries({ queryKey: ['dashboard', 'recent-tasks', userId] });
   },
-  
+
   // Refetch stale queries
   refetchStale: () => {
     queryClient.refetchQueries({ stale: true });

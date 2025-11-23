@@ -139,7 +139,7 @@ export default function Widget() {
       if (newCompleted && shouldCreateNextOccurrence(task) && task.userId) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
           const nextTaskData = {
@@ -265,22 +265,20 @@ export default function Widget() {
             </div>
           ) : (
             <div className="max-h-[500px] overflow-y-auto">
-              {todaysTasks.map((task, index) => (
+              {todaysTasks.map((task) => (
                 <div
                   key={task.id}
-                  className={`p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                    task.completed ? 'opacity-60' : ''
-                  }`}
+                  className={`p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${task.completed ? 'opacity-60' : ''
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     {/* Checkbox */}
                     <button
                       onClick={() => handleToggleComplete(task)}
-                      className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 transition-all ${
-                        task.completed
+                      className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 transition-all ${task.completed
                           ? 'bg-green-500 border-green-500'
                           : 'border-gray-300 hover:border-blue-500'
-                      }`}
+                        }`}
                     >
                       {task.completed && (
                         <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -294,15 +292,13 @@ export default function Widget() {
 
                     {/* Task Content */}
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm font-medium ${
-                        task.completed ? 'line-through text-gray-400' : 'text-gray-800'
-                      }`}>
+                      <h3 className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'
+                        }`}>
                         {task.title}
                       </h3>
                       {task.description && (
-                        <p className={`text-xs mt-0.5 ${
-                          task.completed ? 'text-gray-400' : 'text-gray-600'
-                        }`}>
+                        <p className={`text-xs mt-0.5 ${task.completed ? 'text-gray-400' : 'text-gray-600'
+                          }`}>
                           {task.description.length > 50
                             ? task.description.substring(0, 50) + '...'
                             : task.description

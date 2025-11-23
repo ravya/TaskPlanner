@@ -215,7 +215,7 @@ export default function Tasks() {
       if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
           const nextTaskData = {
@@ -387,14 +387,7 @@ export default function Tasks() {
 
   const sortedTasks = getFilteredAndSortedTasks();
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'todo': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -621,31 +614,28 @@ export default function Tasks() {
             <div className="flex border-b border-gray-200 mb-4">
               <button
                 onClick={() => setStatusFilter('all')}
-                className={`px-4 py-2 font-medium text-sm ${
-                  statusFilter === 'all'
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'all'
                     ? 'border-b-2 border-blue-600 text-blue-600'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 All ({tasks.length})
               </button>
               <button
                 onClick={() => setStatusFilter('active')}
-                className={`px-4 py-2 font-medium text-sm ${
-                  statusFilter === 'active'
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'active'
                     ? 'border-b-2 border-blue-600 text-blue-600'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})
               </button>
               <button
                 onClick={() => setStatusFilter('completed')}
-                className={`px-4 py-2 font-medium text-sm ${
-                  statusFilter === 'completed'
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'completed'
                     ? 'border-b-2 border-blue-600 text-blue-600'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})
               </button>

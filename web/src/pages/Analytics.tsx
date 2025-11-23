@@ -25,13 +25,13 @@ export default function Analytics() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+
   const [timeRange, setTimeRange] = useState<'week' | 'month' | '3months'>('week');
 
   useEffect(() => {
     const auth = getAuth();
     const currentUser = auth.currentUser;
-    setUser(currentUser);
+
 
     if (currentUser) {
       loadTasks(currentUser.uid);
@@ -229,31 +229,28 @@ export default function Analytics() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setTimeRange('week')}
-                  className={`px-4 py-2 rounded-md font-medium ${
-                    timeRange === 'week'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-4 py-2 rounded-md font-medium ${timeRange === 'week'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   Last 7 Days
                 </button>
                 <button
                   onClick={() => setTimeRange('month')}
-                  className={`px-4 py-2 rounded-md font-medium ${
-                    timeRange === 'month'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-4 py-2 rounded-md font-medium ${timeRange === 'month'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   Last 30 Days
                 </button>
                 <button
                   onClick={() => setTimeRange('3months')}
-                  className={`px-4 py-2 rounded-md font-medium ${
-                    timeRange === '3months'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-4 py-2 rounded-md font-medium ${timeRange === '3months'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   Last 90 Days
                 </button>

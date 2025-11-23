@@ -19,7 +19,6 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   subtitle,
   showLogo = true,
   showBackToHome = true,
-  backgroundImage,
   className,
   formClassName,
 }) => {

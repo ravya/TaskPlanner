@@ -23,6 +23,7 @@ export interface DropdownProps {
   className?: string;
   buttonClassName?: string;
   menuClassName?: string;
+  children?: React.ReactNode;
 }
 
 const dropdownVariants = {
@@ -43,6 +44,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   className,
   buttonClassName,
   menuClassName,
+  children,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,11 +52,11 @@ export const Dropdown: React.FC<DropdownProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedItem = items.find(item => item.value === value);
-  
+
   const filteredItems = searchable
-    ? items.filter(item => 
-        item.label.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    ? items.filter(item =>
+      item.label.toLowerCase().includes(searchTerm.toLowerCase())
+    )
     : items;
 
   // Close dropdown when clicking outside
@@ -92,7 +94,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   };
 
   return (
-    <div 
+    <div
       ref={dropdownRef}
       className={clsx('relative', fullWidth ? 'w-full' : 'inline-block', className)}
     >
@@ -111,27 +113,33 @@ export const Dropdown: React.FC<DropdownProps> = ({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="flex items-center">
-          {selectedItem?.icon && (
-            <span className="mr-2 flex-shrink-0">
-              {selectedItem.icon}
+        {children ? (
+          children
+        ) : (
+          <span className="flex items-center">
+            {selectedItem?.icon && (
+              <span className="mr-2 flex-shrink-0">
+                {selectedItem.icon}
+              </span>
+            )}
+            <span className={selectedItem ? 'text-gray-900' : 'text-gray-500'}>
+              {selectedItem?.label || placeholder}
             </span>
-          )}
-          <span className={selectedItem ? 'text-gray-900' : 'text-gray-500'}>
-            {selectedItem?.label || placeholder}
           </span>
-        </span>
-        <svg
-          className={clsx(
-            'ml-2 h-5 w-5 text-gray-400 transition-transform',
-            isOpen && 'rotate-180'
-          )}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        )}
+        {!children && (
+          <svg
+            className={clsx(
+              'ml-2 h-5 w-5 text-gray-400 transition-transform',
+              isOpen && 'rotate-180'
+            )}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </button>
 
       {/* Dropdown Menu */}
@@ -163,7 +171,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
                   />
                 </div>
               )}
-              
+
               <div className="py-1" role="listbox">
                 {filteredItems.length === 0 ? (
                   <div className="px-3 py-2 text-sm text-gray-500">

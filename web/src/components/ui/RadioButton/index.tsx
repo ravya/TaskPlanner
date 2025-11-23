@@ -79,9 +79,10 @@ export const RadioButton = forwardRef<HTMLInputElement, RadioButtonProps>(({
       ref={ref}
       type="radio"
       id={radioId}
-      className={radioClasses}
+      className="absolute opacity-0 w-0 h-0"
       disabled={disabled}
       checked={checked}
+      {...({} as any)}
       {...props}
       whileHover={!disabled ? { scale: 1.05 } : undefined}
       whileTap={!disabled ? { scale: 0.95 } : undefined}

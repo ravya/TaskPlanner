@@ -39,17 +39,7 @@ const variantClasses: Record<InputVariant, string> = {
   warning: 'form-input border-warning-300 focus:ring-warning-500',
 };
 
-// Animation variants
-const inputVariants = {
-  focus: {
-    scale: 1.01,
-    transition: { duration: 0.2 }
-  },
-  blur: {
-    scale: 1,
-    transition: { duration: 0.2 }
-  }
-};
+
 
 // Forward ref input component
 export const Input = forwardRef<HTMLInputElement, InputProps>(({
@@ -71,14 +61,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   id,
   ...props
 }, ref) => {
-  const [isFocused, setIsFocused] = useState(false);
-  
+  const iconClasses = 'absolute top-1/2 transform -translate-y-1/2 text-gray-400';
+
   // Generate unique ID if not provided
   const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   // Determine final variant based on error prop
   const finalVariant = error ? 'error' : variant;
-  
+
   const inputClasses = clsx(
     variantClasses[finalVariant],
     sizeClasses[size],
@@ -95,15 +85,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
     containerClassName
   );
 
-  const iconClasses = 'absolute top-1/2 transform -translate-y-1/2 text-gray-400';
-
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    setIsFocused(true);
     props.onFocus?.(e);
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    setIsFocused(false);
     props.onBlur?.(e);
   };
 
@@ -114,11 +100,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
       className={inputClasses}
       disabled={disabled}
       required={required}
-      variants={inputVariants}
-      animate={isFocused ? 'focus' : 'blur'}
+      {...({} as any)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       {...props}
+      whileFocus={{ scale: 1.01 }}
     />
   ) : (
     <input
@@ -228,10 +214,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(({
 }, ref) => {
   // Generate unique ID if not provided
   const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   // Determine final variant based on error prop
   const finalVariant = error ? 'error' : variant;
-  
+
   const textareaClasses = clsx(
     variantClasses[finalVariant],
     sizeClasses[size],

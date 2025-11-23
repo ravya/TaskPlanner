@@ -167,32 +167,35 @@ class MessagingService {
       await this.ensureServiceWorkerRegistration();
 
       const registration = await navigator.serviceWorker.ready;
-      
-      await registration.showNotification(payload.title, {
+
+      const notificationOptions: NotificationOptions = {
         body: payload.body,
-        icon: payload.icon || '/icon-192.png',
-        badge: payload.badge || '/icon-192.png',
-        image: payload.image,
+        icon: payload.icon || '/pwa-192x192.png',
+        badge: payload.badge || '/pwa-192x192.png',
+        // image: (payload as any).image,
         tag: payload.tag || 'taskflow-notification',
         requireInteraction: payload.requireInteraction || false,
         silent: payload.silent || false,
         data: payload.data || {},
-        actions: payload.actions || [
-          {
-            action: 'view',
-            title: 'View',
-          },
-          {
-            action: 'dismiss',
-            title: 'Dismiss',
-          },
-        ],
-      });
+        // actions: payload.actions || [
+        //   {
+        //     action: 'view',
+        //     title: 'View',
+        //   },
+        //   {
+        //     action: 'dismiss',
+        //     title: 'Dismiss',
+        //   },
+        // ],
+      }; // Corrected: closing the object definition
+
+      await registration.showNotification(payload.title, notificationOptions); // Corrected: missing call to showNotification
+
     } catch (error) {
       console.error('Failed to show notification:', error);
       throw new MessagingServiceError('Failed to show notification', error as Error);
     }
-  }
+  } // Corrected: closing the method
 
   /**
    * Handle notification click events
@@ -278,7 +281,7 @@ class MessagingService {
   }): Promise<void> {
     const isOverdue = task.dueDate < new Date();
     const priorityEmoji = this.getPriorityEmoji(task.priority);
-    
+
     await this.showNotification({
       title: isOverdue ? '⚠️ Task Overdue' : '⏰ Task Reminder',
       body: `${priorityEmoji} ${task.title}`,
@@ -344,11 +347,11 @@ class MessagingService {
     if (completed > 0) {
       body += `✅ ${completed} completed`;
     }
-    
+
     if (pending > 0) {
       body += body ? `, 📋 ${pending} pending` : `📋 ${pending} pending`;
     }
-    
+
     if (overdue > 0) {
       body += body ? `, ⚠️ ${overdue} overdue` : `⚠️ ${overdue} overdue`;
     }

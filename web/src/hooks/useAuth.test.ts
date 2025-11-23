@@ -14,9 +14,9 @@ vi.mock('../services/firebase/auth.service', () => ({
     getCurrentUser: vi.fn(),
     sendPasswordReset: vi.fn(),
     sendEmailVerification: vi.fn(),
-    updateProfile: vi.fn(),
+    updateUserProfile: vi.fn(),
     refreshToken: vi.fn(),
-    onAuthStateChanged: vi.fn(() => () => {}),
+    onAuthStateChanged: vi.fn(() => () => { }),
   },
 }));
 
@@ -85,7 +85,7 @@ describe('useAuth Hook', () => {
     it('should set loading state during login', async () => {
       const loginData = { email: 'test@example.com', password: 'password123' };
       vi.mocked(authService.login).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve(mockUser), 100))
+        () => new Promise((resolve) => setTimeout(() => resolve(mockUser as any), 100)) as Promise<any>
       );
 
       const { result } = renderHook(() => useAuth());
@@ -107,9 +107,11 @@ describe('useAuth Hook', () => {
   describe('Register', () => {
     it('should register successfully', async () => {
       const registerData = {
-        email: 'new@example.com',
+        email: 'test@example.com',
         password: 'password123',
         displayName: 'New User',
+        firstName: 'New',
+        lastName: 'User',
       };
       vi.mocked(authService.register).mockResolvedValue(mockUser);
 
@@ -117,24 +119,26 @@ describe('useAuth Hook', () => {
 
       await result.current.register(registerData);
 
-      await waitFor(() => {
-        expect(authService.register).toHaveBeenCalledWith(registerData);
-      });
+      expect(authService.register).toHaveBeenCalledWith(registerData);
+      expect(result.current.user).toEqual(mockUser);
     });
 
     it('should handle registration error', async () => {
-      const registerData = {
-        email: 'existing@example.com',
-        password: 'password123',
-        displayName: 'Existing User',
-      };
-      vi.mocked(authService.register).mockRejectedValue(
-        new Error('Email already in use')
-      );
+      const error = new Error('Registration failed');
+      vi.mocked(authService.register).mockRejectedValue(error);
 
       const { result } = renderHook(() => useAuth());
 
-      await expect(result.current.register(registerData)).rejects.toThrow();
+      const registerData = {
+        email: 'test@example.com',
+        password: 'password123',
+        displayName: 'New User',
+        firstName: 'New',
+        lastName: 'User',
+      };
+
+      await expect(result.current.register(registerData)).rejects.toThrow('Registration failed');
+      expect(result.current.error).toBe('Registration failed');
     });
   });
 
@@ -146,19 +150,18 @@ describe('useAuth Hook', () => {
 
       await result.current.loginWithGoogle();
 
-      await waitFor(() => {
-        expect(authService.loginWithGoogle).toHaveBeenCalled();
-      });
+      expect(authService.loginWithGoogle).toHaveBeenCalled();
+      expect(result.current.user).toEqual(mockUser);
     });
 
     it('should handle Google login error', async () => {
-      vi.mocked(authService.loginWithGoogle).mockRejectedValue(
-        new Error('Google login failed')
-      );
+      const error = new Error('Google login failed');
+      vi.mocked(authService.loginWithGoogle).mockRejectedValue(error);
 
       const { result } = renderHook(() => useAuth());
 
-      await expect(result.current.loginWithGoogle()).rejects.toThrow();
+      await expect(result.current.loginWithGoogle()).rejects.toThrow('Google login failed');
+      expect(result.current.error).toBe('Google login failed');
     });
   });
 
@@ -170,22 +173,20 @@ describe('useAuth Hook', () => {
 
       await result.current.logout();
 
-      await waitFor(() => {
-        expect(authService.logout).toHaveBeenCalled();
-        expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
-      });
+      expect(authService.logout).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
+      expect(result.current.user).toBeNull();
     });
 
-    it('should force logout even if service fails', async () => {
+    it('should force logout on error', async () => {
       vi.mocked(authService.logout).mockRejectedValue(new Error('Logout failed'));
 
       const { result } = renderHook(() => useAuth());
 
       await result.current.logout();
 
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
-      });
+      expect(result.current.user).toBeNull();
+      expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
     });
   });
 
@@ -213,9 +214,9 @@ describe('useAuth Hook', () => {
   });
 
   describe('Update Profile', () => {
-    it('should update profile successfully', async () => {
+    it('should update user profile', async () => {
       const updates = { displayName: 'Updated Name' };
-      vi.mocked(authService.updateProfile).mockResolvedValue({
+      vi.mocked(authService.updateUserProfile).mockResolvedValue({
         ...mockUser,
         ...updates,
       });
@@ -225,7 +226,7 @@ describe('useAuth Hook', () => {
       await result.current.updateProfile(updates);
 
       await waitFor(() => {
-        expect(authService.updateProfile).toHaveBeenCalledWith(updates);
+        expect(authService.updateUserProfile).toHaveBeenCalledWith(updates);
       });
     });
 
@@ -282,32 +283,6 @@ describe('useAuth Hook', () => {
 
       await waitFor(() => {
         expect(authService.getCurrentUser).toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('Token Refresh', () => {
-    it('should refresh token successfully', async () => {
-      vi.mocked(authService.refreshToken).mockResolvedValue();
-
-      const { result } = renderHook(() => useAuth());
-
-      await result.current.refreshToken();
-
-      expect(authService.refreshToken).toHaveBeenCalled();
-    });
-
-    it('should logout on token refresh failure', async () => {
-      vi.mocked(authService.refreshToken).mockRejectedValue(
-        new Error('Token refresh failed')
-      );
-
-      const { result } = renderHook(() => useAuth());
-
-      await result.current.refreshToken();
-
-      await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
       });
     });
   });

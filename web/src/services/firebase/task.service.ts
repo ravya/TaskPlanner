@@ -15,35 +15,28 @@ import {
   writeBatch,
   serverTimestamp,
   increment,
-  arrayUnion,
-  arrayRemove,
-  DocumentSnapshot,
-  QuerySnapshot,
-  DocumentReference,
   Query,
-  Timestamp,
+  DocumentSnapshot,
   FirestoreError,
   CollectionReference,
   QueryDocumentSnapshot,
   getCountFromServer,
 } from 'firebase/firestore';
 import { db } from './config';
-import type {
-  Task,
+import {
   TaskStatus,
   TaskPriority,
+  TaskSortField,
+} from '../../types/task';
+import type {
+  Task,
   TaskFilters,
   TaskSortOptions,
-  TaskSortField,
   CreateTaskInput,
   UpdateTaskInput,
   BulkUpdateInput,
   TaskStatistics,
-  TaskAttachment,
-  Subtask,
-  TaskComment,
-  TaskReminder,
-  TaskLabel,
+
 } from '../../types/task';
 
 // Custom error type
@@ -96,7 +89,7 @@ class TaskService {
   async createTask(userId: string, taskData: CreateTaskInput): Promise<Task> {
     try {
       const tasksRef = this.getUserTasksRef(userId);
-      
+
       const now = new Date().toISOString();
       const newTask: Omit<Task, 'id'> = {
         title: taskData.title,
@@ -156,7 +149,7 @@ class TaskService {
   async updateTask(userId: string, taskId: string, updates: UpdateTaskInput): Promise<Task> {
     try {
       const taskRef = doc(this.getUserTasksRef(userId), taskId);
-      
+
       // Get current task
       const currentTask = await getDoc(taskRef);
       if (!currentTask.exists()) {
@@ -164,7 +157,6 @@ class TaskService {
       }
 
       const currentData = currentTask.data() as Task;
-      const now = new Date().toISOString();
 
       const updateData: any = {
         ...updates,
@@ -262,7 +254,7 @@ class TaskService {
           q = query(q, startAfter(lastDoc));
         }
       } else if (offset > 0) {
-        q = query(q, limit(offset), startAfter);
+        q = query(q, limit(offset));
       }
 
       q = query(q, limit(pageSize + 1)); // +1 to check if there are more
@@ -298,7 +290,7 @@ class TaskService {
   async deleteTask(userId: string, taskId: string): Promise<void> {
     try {
       const taskRef = doc(this.getUserTasksRef(userId), taskId);
-      
+
       await updateDoc(taskRef, {
         isDeleted: true,
         updatedAt: serverTimestamp(),
@@ -328,7 +320,7 @@ class TaskService {
   async archiveTask(userId: string, taskId: string, archived: boolean = true): Promise<Task> {
     try {
       const taskRef = doc(this.getUserTasksRef(userId), taskId);
-      
+
       await updateDoc(taskRef, {
         isArchived: archived,
         updatedAt: serverTimestamp(),
@@ -348,7 +340,7 @@ class TaskService {
   async duplicateTask(userId: string, taskId: string, updates?: Partial<CreateTaskInput>): Promise<Task> {
     try {
       const originalTask = await this.getTask(userId, taskId);
-      
+
       const duplicateData: CreateTaskInput = {
         title: updates?.title || `${originalTask.title} (Copy)`,
         description: originalTask.description,
@@ -434,7 +426,7 @@ class TaskService {
    */
   async getTaskStatistics(userId: string, filters?: TaskFilters): Promise<TaskStatistics> {
     try {
-      const tasksQuery = filters 
+      const tasksQuery = filters
         ? this.applyFilters(query(this.getUserTasksRef(userId)), filters)
         : query(this.getUserTasksRef(userId), where('isDeleted', '==', false));
 
@@ -479,21 +471,26 @@ class TaskService {
           [TaskStatus.ON_HOLD]: tasks.filter(task => task.status === TaskStatus.ON_HOLD).length,
         },
         completionRate: tasks.length > 0 ? (tasks.filter(task => task.status === TaskStatus.COMPLETED).length / tasks.length) * 100 : 0,
-        avgCompletionTime: this.calculateAvgCompletionTime(tasks),
-        thisWeek: {
-          created: tasks.filter(task => new Date(task.createdAt) >= startOfWeek).length,
-          completed: tasks.filter(task => 
-            task.completedAt && new Date(task.completedAt) >= startOfWeek
-          ).length,
-        },
-        thisMonth: {
-          created: tasks.filter(task => new Date(task.createdAt) >= startOfMonth).length,
-          completed: tasks.filter(task => 
-            task.completedAt && new Date(task.completedAt) >= startOfMonth
-          ).length,
-        },
+        averageCompletionTime: this.calculateAvgCompletionTime(tasks),
+        byCategory: {}, // Not implemented yet
+        byAssignee: {}, // Not implemented yet
+
         productivity: {
-          tasksPerDay: this.calculateTasksPerDay(tasks),
+          today: tasks.filter(task =>
+            task.status === TaskStatus.COMPLETED &&
+            task.completedAt &&
+            new Date(task.completedAt).toDateString() === new Date().toDateString()
+          ).length,
+          thisWeek: tasks.filter(task =>
+            task.status === TaskStatus.COMPLETED &&
+            task.completedAt &&
+            new Date(task.completedAt) >= startOfWeek
+          ).length,
+          thisMonth: tasks.filter(task =>
+            task.status === TaskStatus.COMPLETED &&
+            task.completedAt &&
+            new Date(task.completedAt) >= startOfMonth
+          ).length,
           averageTasksPerWeek: this.calculateAverageTasksPerWeek(tasks),
           streakDays: this.calculateStreakDays(tasks),
         },
@@ -550,7 +547,7 @@ class TaskService {
       });
     } catch (error) {
       console.error('Failed to subscribe to tasks:', error);
-      return () => {}; // Return empty unsubscribe function
+      return () => { }; // Return empty unsubscribe function
     }
   }
 
@@ -643,7 +640,7 @@ class TaskService {
    * Calculate average completion time in hours
    */
   private calculateAvgCompletionTime(tasks: Task[]): number {
-    const completedTasks = tasks.filter(task => 
+    const completedTasks = tasks.filter(task =>
       task.status === TaskStatus.COMPLETED && task.completedAt
     );
 
@@ -661,18 +658,7 @@ class TaskService {
   /**
    * Calculate tasks per day
    */
-  private calculateTasksPerDay(tasks: Task[]): number {
-    const completedTasks = tasks.filter(task => task.status === TaskStatus.COMPLETED);
-    if (completedTasks.length === 0) return 0;
 
-    const uniqueDays = new Set(
-      completedTasks.map(task => 
-        task.completedAt ? new Date(task.completedAt).toDateString() : ''
-      ).filter(Boolean)
-    );
-
-    return completedTasks.length / uniqueDays.size;
-  }
 
   /**
    * Calculate average tasks per week
@@ -680,10 +666,10 @@ class TaskService {
   private calculateAverageTasksPerWeek(tasks: Task[]): number {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    const recentCompletedTasks = tasks.filter(task => 
-      task.status === TaskStatus.COMPLETED && 
-      task.completedAt && 
+
+    const recentCompletedTasks = tasks.filter(task =>
+      task.status === TaskStatus.COMPLETED &&
+      task.completedAt &&
       new Date(task.completedAt) >= thirtyDaysAgo
     );
 
@@ -694,29 +680,44 @@ class TaskService {
    * Calculate streak days
    */
   private calculateStreakDays(tasks: Task[]): number {
-    const completedTasks = tasks.filter(task => 
+    const completedTasks = tasks.filter(task =>
       task.status === TaskStatus.COMPLETED && task.completedAt
     );
 
     if (completedTasks.length === 0) return 0;
 
     const completionDates = Array.from(new Set(
-      completedTasks.map(task => 
+      completedTasks.map(task =>
         new Date(task.completedAt!).toDateString()
       )
     )).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
     let streak = 0;
-    const today = new Date().toDateString();
-    let currentDate = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today to start of day
 
-    for (const dateStr of completionDates) {
-      const checkDate = currentDate.toDateString();
-      
-      if (dateStr === checkDate) {
+    let currentDate = new Date(today); // Start checking from today
+
+    // Check if there's a completion today
+    const hasCompletionToday = completionDates.includes(today.toDateString());
+
+    // If no completion today, check if there was one yesterday to keep streak alive
+    if (!hasCompletionToday) {
+      currentDate.setDate(currentDate.getDate() - 1); // Move to yesterday
+      const yesterday = currentDate.toDateString();
+      if (!completionDates.includes(yesterday)) {
+        return 0; // No completion today or yesterday, streak is 0
+      }
+    }
+
+    // Now, iterate backwards from currentDate to find consecutive days
+    for (let i = 0; i < completionDates.length; i++) {
+      const checkDateStr = currentDate.toDateString();
+      if (completionDates.includes(checkDateStr)) {
         streak++;
-        currentDate.setDate(currentDate.getDate() - 1);
+        currentDate.setDate(currentDate.getDate() - 1); // Move to the previous day
       } else {
+        // If the current day is not in completionDates, the streak is broken
         break;
       }
     }
@@ -724,12 +725,13 @@ class TaskService {
     return streak;
   }
 
+
   /**
    * Map Firestore document to Task
    */
   private mapDocumentToTask(doc: DocumentSnapshot | QueryDocumentSnapshot): Task {
     const data = doc.data()!;
-    
+
     return {
       id: doc.id,
       title: data.title,
@@ -787,7 +789,7 @@ class TaskService {
     };
 
     const message = errorMessages[error.code] || defaultMessage;
-    
+
     console.error('Task Service Error:', {
       code: error.code,
       message: error.message,

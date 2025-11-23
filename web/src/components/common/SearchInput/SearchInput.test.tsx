@@ -10,7 +10,7 @@ describe('SearchInput Component', () => {
 
   it('should call onChange with debounced value', async () => {
     const handleChange = vi.fn();
-    render(<SearchInput onChange={handleChange} debounceTime={300} />);
+    render(<SearchInput onChange={handleChange} debounceDelay={300} />);
 
     const input = screen.getByRole('textbox') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'test query' } });

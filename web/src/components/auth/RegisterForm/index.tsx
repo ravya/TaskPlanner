@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
-import LoadingSpinner from '../../common/LoadingSpinner';
 
 export interface RegisterFormProps {
   onSuccess?: () => void;
@@ -44,10 +43,10 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     confirmPassword: '',
     acceptTerms: false,
   });
-  const [errors, setErrors] = useState<Partial<RegisterFormData & { general?: string }>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof RegisterFormData, string> & { general?: string }>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
-  
+
   const { register } = useAuth();
 
   const validatePassword = (password: string): string[] => {
@@ -57,47 +56,47 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<RegisterFormData & { general?: string }> = {};
-    
+    const newErrors: Partial<Record<keyof RegisterFormData, string> & { general?: string }> = {};
+
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First name is required';
     }
-    
+
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last name is required';
     }
-    
+
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
-    
+
     const passwordErrors = validatePassword(formData.password);
     if (passwordErrors.length > 0) {
       newErrors.password = `Password must have: ${passwordErrors.join(', ')}`;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
-    
+
     if (!formData.acceptTerms) {
       newErrors.acceptTerms = 'You must accept the terms and conditions';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
     setErrors({});
-    
+
     try {
       await register({
         firstName: formData.firstName.trim(),
@@ -105,7 +104,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         email: formData.email,
         password: formData.password,
       });
-      
+
       onSuccess?.();
     } catch (error: any) {
       const errorMessage = error?.message || 'Registration failed. Please try again.';
@@ -126,7 +125,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   const getPasswordStrength = (): { score: number; label: string; color: string } => {
     const validRequirements = passwordRequirements.filter(req => req.regex.test(formData.password));
     const score = (validRequirements.length / passwordRequirements.length) * 100;
-    
+
     if (score < 40) return { score, label: 'Weak', color: 'bg-danger-500' };
     if (score < 70) return { score, label: 'Fair', color: 'bg-warning-500' };
     if (score < 90) return { score, label: 'Good', color: 'bg-success-400' };
@@ -163,7 +162,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             required
             autoComplete="given-name"
           />
-          
+
           <Input
             type="text"
             label="Last name"
@@ -214,7 +213,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               </svg>
             }
           />
-          
+
           {/* Password Strength Indicator */}
           {formData.password && (
             <div className="mt-2">
@@ -222,8 +221,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
                 <span>Password strength</span>
                 <span className={
                   passwordStrength.score < 40 ? 'text-danger-600' :
-                  passwordStrength.score < 70 ? 'text-warning-600' :
-                  'text-success-600'
+                    passwordStrength.score < 70 ? 'text-warning-600' :
+                      'text-success-600'
                 }>
                   {passwordStrength.label}
                 </span>
@@ -236,7 +235,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               </div>
             </div>
           )}
-          
+
           {/* Password Requirements */}
           {showPasswordRequirements && formData.password && (
             <div className="mt-2 p-3 bg-gray-50 rounded-md">
@@ -245,9 +244,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
                 {passwordRequirements.map((req, index) => (
                   <li key={index} className="flex items-center text-xs">
                     <svg
-                      className={`w-3 h-3 mr-2 ${
-                        req.regex.test(formData.password) ? 'text-success-500' : 'text-gray-400'
-                      }`}
+                      className={`w-3 h-3 mr-2 ${req.regex.test(formData.password) ? 'text-success-500' : 'text-gray-400'
+                        }`}
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >

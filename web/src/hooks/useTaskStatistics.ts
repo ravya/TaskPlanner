@@ -19,7 +19,7 @@ export interface UseTaskStatisticsReturn {
 export const useTaskStatistics = (options: UseTaskStatisticsOptions = {}): UseTaskStatisticsReturn => {
   const { user } = useAuth();
   const { filters, enabled = true } = options;
-  
+
   const userId = user?.uid;
 
   const {
@@ -28,16 +28,18 @@ export const useTaskStatistics = (options: UseTaskStatisticsOptions = {}): UseTa
     isError,
     error,
     refetch,
-  } = useQuery({
-    queryKey: ['tasks', 'statistics', userId, filters],
-    queryFn: () => {
+  } = useQuery(
+    ['tasks', 'statistics', userId, filters],
+    () => {
       if (!userId) throw new Error('User not authenticated');
       return taskService.getTaskStatistics(userId, filters);
     },
-    enabled: enabled && !!userId,
-    staleTime: 1000 * 60 * 2, // 2 minutes
-    gcTime: 1000 * 60 * 10, // 10 minutes
-  });
+    {
+      enabled: enabled && !!userId,
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      cacheTime: 1000 * 60 * 10, // 10 minutes
+    }
+  );
 
   return {
     statistics,

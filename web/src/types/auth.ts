@@ -1,17 +1,19 @@
 // User profile and authentication types
+export type UserRole = 'user' | 'admin' | 'moderator';
+
 export interface UserProfile {
   uid: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  displayName?: string;
-  photoURL?: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+  firstName?: string;
+  lastName?: string;
   phoneNumber?: string;
-  role: 'user' | 'admin' | 'moderator';
+  role?: UserRole;
   emailVerified: boolean;
-  isActive: boolean;
+  isActive?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   lastLoginAt?: string;
   preferences?: UserPreferences;
   metadata?: UserMetadata;

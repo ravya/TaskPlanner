@@ -5,7 +5,6 @@ import {
   getDocs,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -15,16 +14,12 @@ import {
   writeBatch,
   serverTimestamp,
   increment,
-  arrayUnion,
-  arrayRemove,
   DocumentSnapshot,
-  QuerySnapshot,
-  DocumentReference,
   Query,
-  Timestamp,
   FirestoreError,
   CollectionReference,
   QueryDocumentSnapshot,
+  DocumentReference,
 } from 'firebase/firestore';
 import { db } from './config';
 
@@ -142,7 +137,7 @@ class FirestoreService {
   async createTask(userId: string, taskData: Omit<TaskDocument, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'version'>): Promise<TaskDocument> {
     try {
       const tasksRef = this.getUserTasksRef(userId);
-      
+
       const newTask: Omit<TaskDocument, 'id'> = {
         ...taskData,
         userId,
@@ -174,7 +169,7 @@ class FirestoreService {
   async updateTask(userId: string, taskId: string, updates: Partial<TaskDocument>): Promise<TaskDocument> {
     try {
       const taskRef = doc(this.getUserTasksRef(userId), taskId);
-      
+
       // Get current task to increment version
       const currentTask = await getDoc(taskRef);
       if (!currentTask.exists()) {
@@ -189,9 +184,9 @@ class FirestoreService {
 
       // Check if task is being completed
       if (updates.completed === true && currentTask.data().completed === false) {
-        updateData.completedAt = serverTimestamp();
+        updateData.completedAt = serverTimestamp() as any;
       } else if (updates.completed === false) {
-        updateData.completedAt = null;
+        updateData.completedAt = null as any;
       }
 
       await updateDoc(taskRef, updateData);
@@ -285,7 +280,7 @@ class FirestoreService {
   async deleteTask(userId: string, taskId: string): Promise<void> {
     try {
       const taskRef = doc(this.getUserTasksRef(userId), taskId);
-      
+
       await updateDoc(taskRef, {
         isDeleted: true,
         updatedAt: serverTimestamp(),
@@ -302,7 +297,7 @@ class FirestoreService {
   async createTag(userId: string, tagData: Omit<TagDocument, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'version'>): Promise<TagDocument> {
     try {
       const tagsRef = this.getUserTagsRef(userId);
-      
+
       const newTag: Omit<TagDocument, 'id'> = {
         ...tagData,
         userId,
@@ -353,7 +348,7 @@ class FirestoreService {
   async updateTag(userId: string, tagId: string, updates: Partial<TagDocument>): Promise<TagDocument> {
     try {
       const tagRef = doc(this.getUserTagsRef(userId), tagId);
-      
+
       await updateDoc(tagRef, {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -390,7 +385,7 @@ class FirestoreService {
   async deleteTag(userId: string, tagId: string): Promise<void> {
     try {
       const tagRef = doc(this.getUserTagsRef(userId), tagId);
-      
+
       await updateDoc(tagRef, {
         isDeleted: true,
         updatedAt: serverTimestamp(),
@@ -425,7 +420,7 @@ class FirestoreService {
   async updateUserPreferences(userId: string, preferences: Partial<UserPreferencesDocument>): Promise<UserPreferencesDocument> {
     try {
       const userRef = this.getUserPreferencesRef(userId);
-      
+
       await updateDoc(userRef, {
         ...preferences,
         updatedAt: serverTimestamp(),
@@ -449,15 +444,15 @@ class FirestoreService {
   ): () => void {
     try {
       let q: Query = collection(db, 'users', userId, 'tasks');
-      
+
       q = query(q, where('isDeleted', '==', false));
-      
+
       if (filters.where) {
         filters.where.forEach(filter => {
           q = query(q, where(filter.field, filter.operator as any, filter.value));
         });
       }
-      
+
       if (filters.orderBy) {
         q = query(q, orderBy(filters.orderBy.field, filters.orderBy.direction));
       } else {
@@ -470,7 +465,7 @@ class FirestoreService {
       });
     } catch (error) {
       console.error('Failed to subscribe to tasks:', error);
-      return () => {}; // Return empty unsubscribe function
+      return () => { }; // Return empty unsubscribe function
     }
   }
 
@@ -616,7 +611,7 @@ class FirestoreService {
     };
 
     const message = errorMessages[error.code] || defaultMessage;
-    
+
     console.error('Firestore Error:', {
       code: error.code,
       message: error.message,

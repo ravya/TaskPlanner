@@ -192,9 +192,6 @@ export default function Register() {
           </div>
         </div>
 
-        <div className="text-center text-xs text-gray-500 mt-4">
-          Running in emulator mode. Do not use with production credentials.
-        </div>
       </div>
     </div>
   );

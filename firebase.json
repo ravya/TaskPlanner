@@ -8,6 +8,7 @@
     "runtime": "nodejs18"
   },
   "hosting": {
+    "site": "taskplanner-mvp",
     "public": "web/dist",
     "ignore": [
       "firebase.json",

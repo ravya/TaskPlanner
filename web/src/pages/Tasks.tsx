@@ -531,18 +531,18 @@ export default function Tasks() {
     <div className="min-h-screen bg-gray-50">
       {/* ... (Header) ... */}
       <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 sm:py-6 gap-3 sm:gap-0">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tasks</h1>
             </div>
-            <div className="flex items-center gap-4">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 text-center sm:text-left">
                 ← Back to Dashboard
               </Link>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
               >
                 Logout
               </button>
@@ -552,7 +552,7 @@ export default function Tasks() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Add Task Button */}
         <div className="mb-6">
           <button
@@ -571,7 +571,7 @@ export default function Tasks() {
                 repeatEndDate: ''
               });
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+            className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
           >
             {showAddForm ? '✕ Cancel' : '+ Add New Task'}
           </button>
@@ -617,7 +617,7 @@ export default function Tasks() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date
                 </label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <input
                       type="date"
@@ -639,7 +639,7 @@ export default function Tasks() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Priority
@@ -686,7 +686,7 @@ export default function Tasks() {
 
                 {formData.isRepeating && (
                   <div className="ml-6 space-y-3 bg-blue-50 p-4 rounded-md">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Repeat Frequency
@@ -781,14 +781,14 @@ export default function Tasks() {
             </div>
 
             {/* Filters and Sort */}
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
               {/* Date Filter */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                 <label className="text-sm font-medium text-gray-700">Date:</label>
                 <select
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom')}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">All Dates</option>
                   <option value="today">Today</option>
@@ -800,32 +800,32 @@ export default function Tasks() {
 
               {/* Custom Date Range */}
               {dateFilter === 'custom' && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <input
                     type="date"
                     value={customDateStart}
                     onChange={(e) => setCustomDateStart(e.target.value)}
                     placeholder="Start Date"
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <span className="text-gray-500">to</span>
+                  <span className="text-gray-500 text-center sm:text-left">to</span>
                   <input
                     type="date"
                     value={customDateEnd}
                     onChange={(e) => setCustomDateEnd(e.target.value)}
                     placeholder="End Date"
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               )}
 
               {/* Sort Dropdown */}
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
                 <label className="text-sm font-medium text-gray-700">Sort by:</label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline' | 'date')}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="priority">Priority (High to Low)</option>
                   <option value="date">Date (Earliest First)</option>
@@ -849,75 +849,77 @@ export default function Tasks() {
           ) : (
             <div className="divide-y divide-gray-200">
               {sortedTasks.map((task) => (
-                <div key={task.id} className="p-4 hover:bg-gray-50 flex items-start gap-3">
-                  {/* Checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'completed'}
-                    onChange={() => handleToggleComplete(task)}
-                    className="mt-1 h-5 w-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                  />
+                <div key={task.id} className="p-3 sm:p-4 hover:bg-gray-50 flex flex-col sm:flex-row items-start gap-3">
+                  <div className="flex items-start gap-3 w-full">
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={task.status === 'completed'}
+                      onChange={() => handleToggleComplete(task)}
+                      className="mt-1 h-5 w-5 min-w-[20px] text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                    />
 
-                  {/* Task Content */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className={`text-base font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                        {task.title}
-                      </h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                      {task.isRepeating && (
-                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800">
-                          🔄 {task.repeatFrequency}
+                    {/* Task Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className={`text-sm sm:text-base font-medium break-words ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          {task.title}
+                        </h3>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${getPriorityColor(task.priority)}`}>
+                          {task.priority}
                         </span>
-                      )}
-                    </div>
-
-                    {task.description && (
-                      <p className={`text-sm mb-1 ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {task.description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-1">
-                      {task.startDate && (
-                        <span>
-                          📅 {formatDateTime(task.startDate, task.startTime)}
-                        </span>
-                      )}
-                      {task.isRepeating && task.repeatEndDate && (
-                        <span>
-                          🔚 Until: {new Date(task.repeatEndDate).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-
-                    {task.tags && task.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {task.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded"
-                          >
-                            #{tag}
+                        {task.isRepeating && (
+                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800 whitespace-nowrap">
+                            🔄 {task.repeatFrequency}
                           </span>
-                        ))}
+                        )}
                       </div>
-                    )}
+
+                      {task.description && (
+                        <p className={`text-xs sm:text-sm mb-1 break-words ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {task.description}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 sm:gap-3 text-xs text-gray-500 mb-1">
+                        {task.startDate && (
+                          <span className="whitespace-nowrap">
+                            📅 {formatDateTime(task.startDate, task.startTime)}
+                          </span>
+                        )}
+                        {task.isRepeating && task.repeatEndDate && (
+                          <span className="whitespace-nowrap">
+                            🔚 Until: {new Date(task.repeatEndDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {task.tags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded whitespace-nowrap"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex sm:flex-col gap-2 w-full sm:w-auto ml-8 sm:ml-0">
                     <button
                       onClick={() => handleEditTask(task)}
-                      className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => confirmDeleteTask(task.id)}
-                      className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
                     >
                       Delete
                     </button>

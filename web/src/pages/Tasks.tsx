@@ -18,6 +18,8 @@ interface Task {
   userId: string;
   createdAt: any;
   completed?: boolean;
+  deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
+  isDeleted?: boolean; // Soft delete flag for parent recurring tasks
 }
 
 export default function Tasks() {
@@ -77,9 +79,25 @@ export default function Tasks() {
       const q = query(tasksRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const loadedTasks: Task[] = [];
       querySnapshot.forEach((doc) => {
-        loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+        const task = { id: doc.id, ...doc.data() } as Task;
+
+        // Filter out soft-deleted parent tasks
+        if (task.isDeleted) return;
+
+        // Filter out past incomplete recurring tasks (don't carry forward)
+        if (task.isRepeating && task.status !== 'completed' && !task.completed) {
+          const taskDate = task.startDate?.split('T')[0];
+          if (taskDate && taskDate < today) {
+            return; // Skip past incomplete recurring tasks
+          }
+        }
+
+        loadedTasks.push(task);
       });
 
       setTasks(loadedTasks);
@@ -294,12 +312,56 @@ export default function Tasks() {
     if (!deleteConfirmation.taskId) return;
 
     const taskId = deleteConfirmation.taskId;
+    const taskToDelete = tasks.find(t => t.id === taskId);
     setDeleteConfirmation({ show: false, taskId: null });
 
     try {
       const db = getFirestore();
-      const taskRef = doc(db, 'tasks', taskId);
-      await deleteDoc(taskRef);
+
+      if (taskToDelete?.isRepeating && taskToDelete.startDate) {
+        // Find all occurrences of this recurring task
+        const allOccurrences = tasks
+          .filter(t =>
+            t.isRepeating &&
+            t.title === taskToDelete.title &&
+            t.repeatFrequency === taskToDelete.repeatFrequency &&
+            t.userId === taskToDelete.userId
+          )
+          .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+        const parentTask = allOccurrences[0];
+        const isParentTask = parentTask.id === taskId;
+        const occurrenceDate = taskToDelete.startDate.split('T')[0];
+
+        if (isParentTask) {
+          // Soft delete the parent task - keep it in DB but mark as deleted
+          const parentRef = doc(db, 'tasks', taskId);
+          const deletedOccurrences = parentTask.deletedOccurrences || [];
+
+          await updateDoc(parentRef, {
+            isDeleted: true,
+            deletedOccurrences: [...deletedOccurrences, occurrenceDate]
+          });
+        } else {
+          // Update parent's deletedOccurrences and hard delete this occurrence
+          const parentRef = doc(db, 'tasks', parentTask.id);
+          const deletedOccurrences = parentTask.deletedOccurrences || [];
+
+          if (!deletedOccurrences.includes(occurrenceDate)) {
+            await updateDoc(parentRef, {
+              deletedOccurrences: [...deletedOccurrences, occurrenceDate]
+            });
+          }
+
+          // Hard delete the occurrence
+          const taskRef = doc(db, 'tasks', taskId);
+          await deleteDoc(taskRef);
+        }
+      } else {
+        // Non-recurring task - just delete it
+        const taskRef = doc(db, 'tasks', taskId);
+        await deleteDoc(taskRef);
+      }
 
       // Reload tasks
       if (user) {

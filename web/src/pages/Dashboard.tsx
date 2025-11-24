@@ -18,6 +18,8 @@ interface Task {
   userId: string;
   createdAt: any;
   completed?: boolean;
+  deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
+  isDeleted?: boolean; // Soft delete flag for parent recurring tasks
 }
 
 export default function Dashboard() {
@@ -118,78 +120,71 @@ export default function Dashboard() {
       const originalDate = new Date(task.startDate);
       const todayDate = new Date(today);
 
-      // Generate occurrences from original date up to today
-      let currentDate = new Date(originalDate);
-      currentDate.setDate(currentDate.getDate() + 1); // Start from day after original
+      // Only generate occurrence for TODAY if it doesn't exist
+      // Don't carry forward missed occurrences from past dates
+      const occurrenceDate = today;
 
-      while (currentDate <= todayDate) {
-        const occurrenceDate = currentDate.toISOString().split('T')[0];
+      // Skip if today is before the original start date
+      if (todayDate < originalDate) continue;
 
-        // Check if occurrence already exists in current tasks list
-        const existingTask = tasks.find(t =>
-          t.title === task.title &&
-          t.startDate === occurrenceDate &&
-          t.userId === task.userId &&
-          t.isRepeating === task.isRepeating &&
-          t.repeatFrequency === task.repeatFrequency
+      // Check if occurrence already exists in current tasks list
+      const existingTask = tasks.find(t =>
+        t.title === task.title &&
+        t.startDate === occurrenceDate &&
+        t.userId === task.userId &&
+        t.isRepeating === task.isRepeating &&
+        t.repeatFrequency === task.repeatFrequency
+      );
+
+      // Also check database directly to avoid duplicates
+      if (!existingTask) {
+        const checkQuery = query(
+          collection(db, 'tasks'),
+          where('userId', '==', userId),
+          where('title', '==', task.title),
+          where('startDate', '==', occurrenceDate),
+          where('isRepeating', '==', true),
+          where('repeatFrequency', '==', task.repeatFrequency)
         );
+        const checkSnapshot = await getDocs(checkQuery);
 
-        // Also check database directly to avoid duplicates
-        if (!existingTask) {
-          const checkQuery = query(
-            collection(db, 'tasks'),
-            where('userId', '==', userId),
-            where('title', '==', task.title),
-            where('startDate', '==', occurrenceDate),
-            where('isRepeating', '==', true),
-            where('repeatFrequency', '==', task.repeatFrequency)
-          );
-          const checkSnapshot = await getDocs(checkQuery);
-
-          if (checkSnapshot.empty) {
-            // Check if we're within the repeat end date
-            if (task.repeatEndDate) {
-              const endDate = new Date(task.repeatEndDate);
-              if (currentDate > endDate) break;
-            }
-
-            // Create the missing occurrence
-            const nextTaskData = {
-              title: task.title,
-              description: task.description,
-              startDate: occurrenceDate,
-              startTime: task.startTime || null,
-              status: 'todo',
-              priority: task.priority,
-              tags: task.tags || [],
-              isRepeating: task.isRepeating,
-              repeatFrequency: task.repeatFrequency,
-              repeatEndDate: task.repeatEndDate || null,
-              userId: task.userId,
-              createdAt: Timestamp.now(),
-              completed: false
-            };
-
-            try {
-              await addDoc(collection(db, 'tasks'), nextTaskData);
-              createdTasks.push(occurrenceDate);
-            } catch (error) {
-              console.error(`Error creating occurrence for ${occurrenceDate}:`, error);
-            }
+        if (checkSnapshot.empty) {
+          // Check if this occurrence was explicitly deleted
+          const deletedOccurrences = task.deletedOccurrences || [];
+          if (deletedOccurrences.includes(occurrenceDate)) {
+            // Skip this occurrence - it was explicitly deleted by user
+            continue;
           }
-        }
 
-        // Move to next occurrence date
-        switch (task.repeatFrequency) {
-          case 'daily':
-            currentDate.setDate(currentDate.getDate() + 1);
-            break;
-          case 'weekly':
-            currentDate.setDate(currentDate.getDate() + 7);
-            break;
-          case 'monthly':
-            currentDate.setMonth(currentDate.getMonth() + 1);
-            break;
+          // Check if we're within the repeat end date
+          if (task.repeatEndDate) {
+            const endDate = new Date(task.repeatEndDate);
+            if (todayDate > endDate) continue;
+          }
+
+          // Create today's occurrence
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: occurrenceDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          try {
+            await addDoc(collection(db, 'tasks'), nextTaskData);
+            createdTasks.push(occurrenceDate);
+          } catch (error) {
+            console.error(`Error creating occurrence for ${occurrenceDate}:`, error);
+          }
         }
       }
     }
@@ -205,30 +200,51 @@ export default function Dashboard() {
       const q = query(tasksRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
-      const loadedTasks: Task[] = [];
+      const allTasks: Task[] = [];
       querySnapshot.forEach((doc) => {
-        loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+        allTasks.push({ id: doc.id, ...doc.data() } as Task);
       });
 
-      // Generate missing repeating task occurrences
-      const hasNewOccurrences = await generateMissingRepeatingOccurrences(loadedTasks, userId);
+      // Generate missing repeating task occurrences (using all tasks including soft-deleted)
+      const hasNewOccurrences = await generateMissingRepeatingOccurrences(allTasks, userId);
 
       // Reload tasks if new occurrences were created
       if (hasNewOccurrences) {
         const updatedSnapshot = await getDocs(q);
-        loadedTasks.length = 0; // Clear array
+        allTasks.length = 0; // Clear array
         updatedSnapshot.forEach((doc) => {
-          loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+          allTasks.push({ id: doc.id, ...doc.data() } as Task);
         });
       }
 
-      setTasks(loadedTasks);
-
-      // Filter today's tasks - include repeating tasks even if previous day wasn't completed
+      // Filter out soft-deleted tasks for display
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      const todayTasks = loadedTasks.filter(task => {
+      const visibleTasks = allTasks.filter(t => {
+        // Filter out soft-deleted tasks
+        if (t.isDeleted) return false;
+
+        // For recurring tasks, hide past occurrences (both completed and incomplete)
+        // This prevents showing the original parent task when we have today's occurrence
+        if (t.isRepeating) {
+          const taskDate = t.startDate?.split('T')[0];
+          if (taskDate && taskDate < today) {
+            // Only show past recurring tasks if they're completed
+            // This allows viewing completed history but hides incomplete past tasks
+            if (t.status !== 'completed' && !t.completed) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+      });
+
+      setTasks(visibleTasks);
+
+      // Filter today's tasks - include repeating tasks even if previous day wasn't completed
+      const todayTasks = visibleTasks.filter(task => {
         if (!task.startDate) return false;
         // Ensure we're comparing dates correctly (YYYY-MM-DD format)
         const taskDate = task.startDate.split('T')[0]; // Handle any time component

@@ -20,6 +20,7 @@ interface Task {
   completed?: boolean;
   deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
   isDeleted?: boolean; // Soft delete flag for parent recurring tasks
+  mode?: 'personal' | 'professional'; // Task mode
 }
 
 export default function Dashboard() {
@@ -31,6 +32,9 @@ export default function Dashboard() {
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [showAllTodayTasks, setShowAllTodayTasks] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
+    return (localStorage.getItem('taskModeFilter') as any) || 'all';
+  });
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -40,7 +44,8 @@ export default function Dashboard() {
     tags: '',
     isRepeating: false,
     repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: ''
+    repeatEndDate: '',
+    mode: 'personal' as 'personal' | 'professional'
   });
 
   useEffect(() => {
@@ -383,7 +388,8 @@ export default function Dashboard() {
         repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
         status: 'todo',
         userId: user.uid,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        mode: formData.mode || 'personal'
       };
 
       await addDoc(collection(db, 'tasks'), taskData);
@@ -398,7 +404,8 @@ export default function Dashboard() {
         tags: '',
         isRepeating: false,
         repeatFrequency: 'daily',
-        repeatEndDate: ''
+        repeatEndDate: '',
+        mode: 'personal'
       });
       setShowAddForm(false);
 
@@ -559,7 +566,8 @@ export default function Dashboard() {
                       tags: '',
                       isRepeating: false,
                       repeatFrequency: 'daily',
-                      repeatEndDate: ''
+                      repeatEndDate: '',
+                      mode: 'personal'
                     });
                   }}
                   className="text-gray-400 hover:text-gray-600"
@@ -636,6 +644,19 @@ export default function Dashboard() {
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+                      <select
+                        value={formData.mode}
+                        onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'personal' | 'professional' })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="personal">🏠 Personal</option>
+                        <option value="professional">💼 Professional</option>
+                      </select>
+                    </div>
+                  </div>
                   <div>
                     <label className="flex items-center gap-2">
                       <input
@@ -692,7 +713,8 @@ export default function Dashboard() {
                           tags: '',
                           isRepeating: false,
                           repeatFrequency: 'daily',
-                          repeatEndDate: ''
+                          repeatEndDate: '',
+                          mode: 'personal'
                         });
                       }}
                       className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
@@ -898,14 +920,56 @@ export default function Dashboard() {
 
         {/* Today's Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Today's Tasks</h2>
-            <Link
-              to="/tasks?filter=today"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              View all tasks →
-            </Link>
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Today's Tasks</h2>
+              <Link
+                to="/tasks?filter=today"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                View all tasks →
+              </Link>
+            </div>
+
+            {/* Mode Filter Tabs */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => {
+                  setModeFilter('all');
+                  localStorage.setItem('taskModeFilter', 'all');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                All Modes
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('personal');
+                  localStorage.setItem('taskModeFilter', 'personal');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                🏠 Personal
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('professional');
+                  localStorage.setItem('taskModeFilter', 'professional');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                💼 Professional
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -925,34 +989,51 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {(showAllTodayTasks ? todaysTasks : todaysTasks.slice(0, 5)).map((task) => (
-                <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'completed' || task.completed === true}
-                    onChange={() => handleToggleComplete(task)}
-                    className="h-5 w-5 text-blue-600 rounded cursor-pointer"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`text-base font-medium ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                        {task.title}
-                      </h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
+              {(() => {
+                // Filter tasks by mode
+                const filteredTasks = modeFilter === 'all'
+                  ? todaysTasks
+                  : todaysTasks.filter(task => (task.mode || 'personal') === modeFilter);
+
+                const tasksToShow = showAllTodayTasks ? filteredTasks : filteredTasks.slice(0, 5);
+
+                return tasksToShow.map((task) => (
+                  <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={task.status === 'completed' || task.completed === true}
+                      onChange={() => handleToggleComplete(task)}
+                      className="h-5 w-5 text-blue-600 rounded cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-base font-medium ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          {task.title}
+                        </h3>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
+                          {task.priority}
+                        </span>
+                        {modeFilter === 'all' && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-orange-100 text-orange-800'
+                            }`}>
+                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
+                          </span>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className={`text-sm mt-1 ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {task.description}
+                        </p>
+                      )}
                     </div>
-                    {task.description && (
-                      <p className={`text-sm mt-1 ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {task.description}
-                      </p>
-                    )}
+                    <span className="text-xs text-gray-500">
+                      {task.startTime || 'All day'}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {task.startTime || 'All day'}
-                  </span>
-                </div>
-              ))}
+                ));
+              })()}
               {todaysTasks.length > 5 && (
                 <div className="p-4 text-center">
                   {!showAllTodayTasks ? (

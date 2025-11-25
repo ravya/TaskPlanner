@@ -30,6 +30,7 @@ export interface Task {
   position: number; // for ordering
   boardId?: string;
   listId?: string;
+  mode: TaskMode; // personal or professional
 }
 
 // Task status enum
@@ -51,6 +52,12 @@ export enum TaskPriority {
   HIGH = 'high',
   HIGHEST = 'highest',
   URGENT = 'urgent',
+}
+
+// Task mode enum
+export enum TaskMode {
+  PERSONAL = 'personal',
+  PROFESSIONAL = 'professional',
 }
 
 // Subtask interface
@@ -196,6 +203,7 @@ export interface TaskFormData {
   subtasks?: Omit<Subtask, 'id' | 'createdAt' | 'updatedAt' | 'position'>[];
   labels?: string[];
   customFields?: Record<string, any>;
+  mode?: TaskMode;
 }
 
 // Task update data
@@ -241,6 +249,7 @@ export interface TaskFilters {
   hasSubtasks?: boolean;
   isOverdue?: boolean;
   isDueSoon?: boolean; // due within next 7 days
+  mode?: TaskMode[];
 }
 
 // Task sort options
@@ -511,6 +520,7 @@ export interface CreateTaskInput extends Omit<TaskFormData, 'attachments' | 'lab
   position?: number;
   boardId?: string;
   listId?: string;
+  mode?: TaskMode;
 }
 
 export interface UpdateTaskInput extends Omit<TaskUpdateData, 'attachments' | 'labels'> {

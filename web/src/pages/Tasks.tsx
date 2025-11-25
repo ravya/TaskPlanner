@@ -20,6 +20,7 @@ interface Task {
   completed?: boolean;
   deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
   isDeleted?: boolean; // Soft delete flag for parent recurring tasks
+  mode?: 'personal' | 'professional'; // Task mode
 }
 
 export default function Tasks() {
@@ -38,6 +39,9 @@ export default function Tasks() {
   );
   const [customDateStart, setCustomDateStart] = useState<string>('');
   const [customDateEnd, setCustomDateEnd] = useState<string>('');
+  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
+    return (localStorage.getItem('taskModeFilter') as any) || 'all';
+  });
 
   useEffect(() => {
     const filterParam = searchParams.get('filter');
@@ -58,7 +62,8 @@ export default function Tasks() {
     tags: '',
     isRepeating: false,
     repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: ''
+    repeatEndDate: '',
+    mode: 'personal' as 'personal' | 'professional'
   });
 
   useEffect(() => {
@@ -144,7 +149,8 @@ export default function Tasks() {
         repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
         status: 'todo',
         userId: user.uid,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        mode: formData.mode || 'personal'
       };
 
       if (editingTask) {
@@ -171,7 +177,8 @@ export default function Tasks() {
         tags: '',
         isRepeating: false,
         repeatFrequency: 'daily',
-        repeatEndDate: ''
+        repeatEndDate: '',
+        mode: 'personal'
       });
       setShowAddForm(false);
       setEditingTask(null);
@@ -198,7 +205,8 @@ export default function Tasks() {
       tags: task.tags ? task.tags.join(', ') : '',
       isRepeating: task.isRepeating || false,
       repeatFrequency: task.repeatFrequency || 'daily',
-      repeatEndDate: task.repeatEndDate || ''
+      repeatEndDate: task.repeatEndDate || '',
+      mode: (task.mode as any) || 'personal'
     });
     setShowAddForm(true);
 
@@ -421,6 +429,14 @@ export default function Tasks() {
       filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
     }
 
+    // Filter by mode
+    if (modeFilter !== 'all') {
+      filteredTasks = filteredTasks.filter(task => {
+        const taskMode = task.mode || 'personal'; // default to personal for backward compatibility
+        return taskMode === modeFilter;
+      });
+    }
+
     // Filter by date
     if (dateFilter !== 'all') {
       const now = new Date();
@@ -568,7 +584,8 @@ export default function Tasks() {
                 tags: '',
                 isRepeating: false,
                 repeatFrequency: 'daily',
-                repeatEndDate: ''
+                repeatEndDate: '',
+                mode: 'personal'
               });
             }}
             className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
@@ -666,6 +683,22 @@ export default function Tasks() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="work, urgent, meeting"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mode
+                  </label>
+                  <select
+                    value={formData.mode}
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'personal' | 'professional' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="personal">🏠 Personal</option>
+                    <option value="professional">💼 Professional</option>
+                  </select>
                 </div>
               </div>
 
@@ -780,6 +813,46 @@ export default function Tasks() {
               </button>
             </div>
 
+            {/* Mode Filter Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => {
+                  setModeFilter('all');
+                  localStorage.setItem('taskModeFilter', 'all');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                All Modes
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('personal');
+                  localStorage.setItem('taskModeFilter', 'personal');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                🏠 Personal
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('professional');
+                  localStorage.setItem('taskModeFilter', 'professional');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                💼 Professional
+              </button>
+            </div>
+
             {/* Filters and Sort */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
               {/* Date Filter */}
@@ -871,6 +944,14 @@ export default function Tasks() {
                         {task.isRepeating && (
                           <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800 whitespace-nowrap">
                             🔄 {task.repeatFrequency}
+                          </span>
+                        )}
+                        {modeFilter === 'all' && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-orange-100 text-orange-800'
+                            }`}>
+                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
                           </span>
                         )}
                       </div>

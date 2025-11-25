@@ -1,3 +1,8 @@
+export enum TaskMode {
+  PERSONAL = 'personal',
+  PROFESSIONAL = 'professional',
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -12,6 +17,7 @@ export interface Task {
   repeatEndDate?: string; // YYYY-MM-DD format
   userId: string;
   createdAt: any; // Firestore Timestamp
+  mode: TaskMode;
 }
 
 export interface TaskFormData {
@@ -24,4 +30,5 @@ export interface TaskFormData {
   isRepeating: boolean;
   repeatFrequency: 'daily' | 'weekly' | 'monthly';
   repeatEndDate: string;
+  mode: TaskMode;
 }

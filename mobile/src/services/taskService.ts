@@ -11,7 +11,7 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Task, TaskFormData } from '../types/Task';
+import { Task, TaskFormData, TaskMode } from '../types/Task';
 
 class TaskService {
   private collectionName = 'tasks';
@@ -40,6 +40,7 @@ class TaskService {
         status: 'todo',
         userId: userId,
         createdAt: Timestamp.now(),
+        mode: formData.mode || TaskMode.PERSONAL, // default to personal
       };
 
       const docRef = await addDoc(collection(db, this.collectionName), taskData);

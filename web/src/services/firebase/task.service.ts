@@ -27,6 +27,7 @@ import {
   TaskStatus,
   TaskPriority,
   TaskSortField,
+  TaskMode,
 } from '../../types/task';
 import type {
   Task,
@@ -126,6 +127,7 @@ class TaskService {
         position: taskData.position || 0,
         boardId: taskData.boardId,
         listId: taskData.listId,
+        mode: taskData.mode || TaskMode.PERSONAL, // default to personal
       };
 
       const docRef = await addDoc(tasksRef, {
@@ -615,6 +617,10 @@ class TaskService {
       }
     }
 
+    if (filters.mode && filters.mode.length > 0) {
+      filteredQuery = query(filteredQuery, where('mode', 'in', filters.mode));
+    }
+
     return filteredQuery;
   }
 
@@ -767,6 +773,7 @@ class TaskService {
       position: data.position || 0,
       boardId: data.boardId,
       listId: data.listId,
+      mode: data.mode || TaskMode.PERSONAL, // backward compatibility - default to personal
     };
   }
 

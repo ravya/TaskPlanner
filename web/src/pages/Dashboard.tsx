@@ -755,6 +755,30 @@ export default function Dashboard() {
 
         {/* Task Statistics - 3 Main Tiles */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Today's Tasks */}
+          <Link
+            to="/tasks?filter=today"
+            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Today's Tasks</h3>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            <div className="text-4xl font-bold text-purple-600 mb-2">{todaysTasks.length}</div>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                {todaysTasks.filter(t => t.status === 'completed').length} completed
+              </p>
+              <span className="text-xs text-purple-600 font-medium">
+                View All →
+              </span>
+            </div>
+          </Link>
+
           {/* All Tasks */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center justify-between mb-4">
@@ -817,30 +841,6 @@ export default function Dashboard() {
               </p>
               <span className="text-xs text-green-600 font-medium">
                 View Analytics →
-              </span>
-            </div>
-          </Link>
-
-          {/* Today's Tasks */}
-          <Link
-            to="/tasks?filter=today"
-            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Today's Tasks</h3>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            </div>
-            <div className="text-4xl font-bold text-purple-600 mb-2">{todaysTasks.length}</div>
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-500">
-                {todaysTasks.filter(t => t.status === 'completed').length} completed
-              </p>
-              <span className="text-xs text-purple-600 font-medium">
-                View All →
               </span>
             </div>
           </Link>
@@ -1015,8 +1015,8 @@ export default function Dashboard() {
                         </span>
                         {modeFilter === 'all' && (
                           <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-orange-100 text-orange-800'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-orange-100 text-orange-800'
                             }`}>
                             {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
                           </span>

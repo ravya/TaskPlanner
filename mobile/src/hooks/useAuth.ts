@@ -1,38 +1,20 @@
 import { useState, useEffect } from 'react';
-import { User as FirebaseUser } from 'firebase/auth';
-import { authService } from '../services/authService';
+import { User } from '../types';
+import { onAuthStateChange, getCurrentUser } from '../services/firebase';
 
-export const useAuth = () => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+export function useAuth() {
+    const [user, setUser] = useState<User | null>(getCurrentUser());
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const unsubscribe = authService.onAuthStateChanged((user) => {
-      setUser(user);
-      setLoading(false);
-    });
+    useEffect(() => {
+        const unsubscribe = onAuthStateChange((user) => {
+            setUser(user);
+            setLoading(false);
+        });
 
-    return () => unsubscribe();
-  }, []);
+        return unsubscribe;
+    }, []);
 
-  const login = async (email: string, password: string) => {
-    return authService.login(email, password);
-  };
-
-  const register = async (email: string, password: string, displayName: string) => {
-    return authService.register(email, password, displayName);
-  };
-
-  const logout = async () => {
-    return authService.logout();
-  };
-
-  return {
-    user,
-    loading,
-    login,
-    register,
-    logout,
-    isAuthenticated: !!user,
-  };
-};
+    return { user, loading, error, setError };
+}

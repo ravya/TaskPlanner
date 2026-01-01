@@ -1,65 +1,94 @@
-import React from 'react';
-import { Text } from 'react-native';
+import React, { useState } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useAuth } from '../hooks/useAuth';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Auth Screens
-import { LoginScreen } from '../screens/LoginScreen';
-import { RegisterScreen } from '../screens/RegisterScreen';
+import { useAuth } from '../hooks';
+import {
+    DashboardScreen,
+    TasksScreen,
+    ProjectsScreen,
+    AnalyticsScreen,
+    SettingsScreen,
+    LoginScreen,
+    RegisterScreen,
+} from '../screens';
+import { colors, spacing } from '../styles/theme';
 
-// Main Screens
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { TasksScreen } from '../screens/TasksScreen';
-
-const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const AuthStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="Login" component={LoginScreen} />
-    <Stack.Screen name="Register" component={RegisterScreen} />
-  </Stack.Navigator>
-);
+function MainTabs() {
+    return (
+        <Tab.Navigator
+            screenOptions={({ route }) => ({
+                tabBarLabel: route.name,
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.textTertiary,
+                tabBarStyle: styles.tabBar,
+                tabBarLabelStyle: styles.tabLabel,
+                headerShown: false,
+            })}
+        >
+            <Tab.Screen
+                name="Dashboard"
+                component={DashboardScreen}
+                options={{ tabBarLabel: 'Today' }}
+            />
+            <Tab.Screen name="Tasks" component={TasksScreen} />
+            <Tab.Screen name="Projects" component={ProjectsScreen} />
+            <Tab.Screen name="Analytics" component={AnalyticsScreen} />
+            <Tab.Screen name="Settings" component={SettingsScreen} />
+        </Tab.Navigator>
+    );
+}
 
-const MainTabs = () => (
-  <Tab.Navigator
-    screenOptions={{
-      headerShown: false,
-      tabBarActiveTintColor: '#3b82f6',
-      tabBarInactiveTintColor: '#9ca3af',
-    }}
-  >
-    <Tab.Screen
-      name="Home"
-      component={DashboardScreen}
-      options={{
-        tabBarLabel: 'Home',
-        tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>🏠</Text>,
-      }}
-    />
-    <Tab.Screen
-      name="Tasks"
-      component={TasksScreen}
-      options={{
-        tabBarLabel: 'Tasks',
-        tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 24 }}>📋</Text>,
-      }}
-    />
-  </Tab.Navigator>
-);
+function AuthScreens() {
+    const [screen, setScreen] = useState<'login' | 'register'>('login');
 
-export const AppNavigator = () => {
-  const { user, loading } = useAuth();
+    if (screen === 'login') {
+        return <LoginScreen onNavigateToRegister={() => setScreen('register')} />;
+    }
+    return <RegisterScreen onNavigateToLogin={() => setScreen('login')} />;
+}
 
-  if (loading) {
-    return null; // Or a loading screen
-  }
+export function AppNavigator() {
+    const { user, loading } = useAuth();
 
-  return (
-    <NavigationContainer>
-      {user ? <MainTabs /> : <AuthStack />}
-    </NavigationContainer>
-  );
-};
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
+    return (
+        <SafeAreaProvider>
+            <NavigationContainer>
+                {user ? <MainTabs /> : <AuthScreens />}
+            </NavigationContainer>
+        </SafeAreaProvider>
+    );
+}
+
+const styles = StyleSheet.create({
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+    },
+    tabBar: {
+        backgroundColor: colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        paddingTop: spacing.xs,
+        paddingBottom: spacing.sm,
+        height: 60,
+    },
+    tabLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+    },
+});

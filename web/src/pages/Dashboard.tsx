@@ -2,6 +2,9 @@ import { getAuth, signOut } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
+import AddTaskInline from '../components/AddTaskInline';
+import { projectService } from '../services/firebase/project.service';
+import type { Project, ProjectMode } from '../types/project';
 
 interface Task {
   id: string;
@@ -35,18 +38,11 @@ export default function Dashboard() {
   const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
     return (localStorage.getItem('taskModeFilter') as any) || 'all';
   });
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    startDate: new Date().toISOString().split('T')[0],
-    startTime: '',
-    priority: 'medium' as 'low' | 'medium' | 'high',
-    tags: '',
-    isRepeating: false,
-    repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: '',
-    mode: 'personal' as 'personal' | 'professional'
-  });
+
+  // Project state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -69,6 +65,31 @@ export default function Dashboard() {
       loadTasks(currentUser.uid);
     }
   }, []);
+
+  // Subscribe to projects when user and modeFilter change
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (modeFilter === 'all') {
+      // When 'all' mode, don't filter by project
+      setSelectedProjectId(undefined);
+      setProjects([]);
+      return;
+    }
+
+    const unsubscribe = projectService.subscribeToProjects(
+      user.uid,
+      (projectList) => {
+        setProjects(projectList);
+        // Ensure default project exists
+        if (projectList.length === 0) {
+          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
+        }
+      },
+      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, modeFilter]);
 
   const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
     const date = new Date(currentDate);
@@ -349,64 +370,53 @@ export default function Dashboard() {
     }
   };
 
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleAddTaskInline = async (taskData: {
+    title: string;
+    description: string;
+    startDate: string;
+    startTime: string;
+    priority: 'low' | 'medium' | 'high';
+    tags: string[];
+    isRepeating: boolean;
+    repeatFrequency: 'daily' | 'weekly' | 'monthly';
+    repeatEndDate: string;
+    mode: 'personal' | 'professional';
+    subtasks?: { id: string; title: string; completed: boolean }[];
+    projectId?: string;
+  }) => {
     if (!user) {
       alert('You must be logged in to create a task');
-      return;
-    }
-
-    if (!formData.title.trim()) {
-      alert('Please enter a task title');
       return;
     }
 
     try {
       const db = getFirestore();
 
-      // Parse tags from comma-separated string
-      const tagArray = formData.tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
-
-      // Use today's date if startDate is not set
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const taskStartDate = formData.startDate || today;
-
-      const taskData = {
-        title: formData.title,
-        description: formData.description,
-        startDate: taskStartDate,
-        startTime: formData.startTime || null,
-        priority: formData.priority,
-        tags: tagArray,
-        isRepeating: formData.isRepeating,
-        repeatFrequency: formData.isRepeating ? formData.repeatFrequency : null,
-        repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
+      const firestoreData: any = {
+        title: taskData.title,
+        description: taskData.description,
+        startDate: taskData.startDate,
+        startTime: taskData.startTime || null,
+        priority: taskData.priority,
+        tags: taskData.tags,
+        isRepeating: taskData.isRepeating,
+        repeatFrequency: taskData.isRepeating ? taskData.repeatFrequency : null,
+        repeatEndDate: taskData.isRepeating ? taskData.repeatEndDate : null,
         status: 'todo',
         userId: user.uid,
         createdAt: Timestamp.now(),
-        mode: formData.mode || 'personal'
+        mode: taskData.mode || 'personal',
+        subtasks: taskData.subtasks || []
       };
 
-      await addDoc(collection(db, 'tasks'), taskData);
+      // Add projectId if provided, or use currently selected project
+      if (taskData.projectId) {
+        firestoreData.projectId = taskData.projectId;
+      } else if (selectedProjectId) {
+        firestoreData.projectId = selectedProjectId;
+      }
 
-      // Reset form
-      setFormData({
-        title: '',
-        description: '',
-        startDate: new Date().toISOString().split('T')[0],
-        startTime: '',
-        priority: 'medium',
-        tags: '',
-        isRepeating: false,
-        repeatFrequency: 'daily',
-        repeatEndDate: '',
-        mode: 'personal'
-      });
+      await addDoc(collection(db, 'tasks'), firestoreData);
       setShowAddForm(false);
 
       // Reload tasks
@@ -548,185 +558,12 @@ export default function Dashboard() {
           </button>
         )}
 
-        {/* Task Creation Form Modal/Overlay */}
-        {showAddForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddForm(false)}>
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-                <h3 className="text-xl font-semibold text-gray-900">Create New Task</h3>
-                <button
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setFormData({
-                      title: '',
-                      description: '',
-                      startDate: new Date().toISOString().split('T')[0],
-                      startTime: '',
-                      priority: 'medium',
-                      tags: '',
-                      isRepeating: false,
-                      repeatFrequency: 'daily',
-                      repeatEndDate: '',
-                      mode: 'personal'
-                    });
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-6">
-                <form onSubmit={handleAddTask} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter task title"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter task description"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                      <input
-                        type="date"
-                        value={formData.startDate}
-                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Time (Optional)</label>
-                      <input
-                        type="time"
-                        value={formData.startTime}
-                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <select
-                        value={formData.priority}
-                        onChange={(e) => setFormData({ ...formData, priority: e.target.value as 'low' | 'medium' | 'high' })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-                      <input
-                        type="text"
-                        value={formData.tags}
-                        onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="work, urgent, personal"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
-                      <select
-                        value={formData.mode}
-                        onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'personal' | 'professional' })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="personal">🏠 Personal</option>
-                        <option value="professional">💼 Professional</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.isRepeating}
-                        onChange={(e) => setFormData({ ...formData, isRepeating: e.target.checked })}
-                        className="rounded"
-                      />
-                      <span className="text-sm font-medium text-gray-700">Repeat this task</span>
-                    </label>
-                  </div>
-                  {formData.isRepeating && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6 border-l-2 border-blue-200">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Repeat Frequency</label>
-                        <select
-                          value={formData.repeatFrequency}
-                          onChange={(e) => setFormData({ ...formData, repeatFrequency: e.target.value as 'daily' | 'weekly' | 'monthly' })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Repeat Until (Optional)</label>
-                        <input
-                          type="date"
-                          value={formData.repeatEndDate}
-                          onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex gap-2 pt-4">
-                    <button
-                      type="submit"
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-                    >
-                      Create Task
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddForm(false);
-                        setFormData({
-                          title: '',
-                          description: '',
-                          startDate: new Date().toISOString().split('T')[0],
-                          startTime: '',
-                          priority: 'medium',
-                          tags: '',
-                          isRepeating: false,
-                          repeatFrequency: 'daily',
-                          repeatEndDate: '',
-                          mode: 'personal'
-                        });
-                      }}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Task Creation Form - New Compact Component */}
+        <AddTaskInline
+          isOpen={showAddForm}
+          onSubmit={handleAddTaskInline}
+          onCancel={() => setShowAddForm(false)}
+        />
 
         {/* Email Verification Banner - Only show if not verified and account < 1 week */}
         {showEmailVerification && (
@@ -970,6 +807,71 @@ export default function Dashboard() {
                 💼 Professional
               </button>
             </div>
+
+            {/* Projects Filter - Only show when a specific mode is selected */}
+            {modeFilter !== 'all' && projects.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <span>📁</span>
+                  <span className="font-medium">
+                    {selectedProjectId
+                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
+                      : 'All Projects'}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {selectedProjectId && (
+                  <button
+                    onClick={() => setSelectedProjectId(undefined)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Projects Dropdown Panel */}
+            {showProjectsPanel && modeFilter !== 'all' && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedProjectId(undefined);
+                      setShowProjectsPanel(false);
+                    }}
+                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                  >
+                    📋 All Projects
+                  </button>
+                  {projects.map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setShowProjectsPanel(false);
+                      }}
+                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                    >
+                      <span style={{ color: project.color }}>{project.icon}</span>
+                      <span className="truncate">{project.name}</span>
+                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -990,10 +892,17 @@ export default function Dashboard() {
           ) : (
             <div className="divide-y divide-gray-200">
               {(() => {
-                // Filter tasks by mode
-                const filteredTasks = modeFilter === 'all'
+                // Filter tasks by mode and project
+                let filteredTasks = modeFilter === 'all'
                   ? todaysTasks
                   : todaysTasks.filter(task => (task.mode || 'personal') === modeFilter);
+
+                // Further filter by project if one is selected
+                if (selectedProjectId) {
+                  filteredTasks = filteredTasks.filter(task =>
+                    (task as any).projectId === selectedProjectId
+                  );
+                }
 
                 const tasksToShow = showAllTodayTasks ? filteredTasks : filteredTasks.slice(0, 5);
 

@@ -31,6 +31,7 @@ export interface Task {
   boardId?: string;
   listId?: string;
   mode: TaskMode; // personal or professional
+  projectId?: string; // project this task belongs to
 }
 
 // Task status enum
@@ -204,6 +205,7 @@ export interface TaskFormData {
   labels?: string[];
   customFields?: Record<string, any>;
   mode?: TaskMode;
+  projectId?: string;
 }
 
 // Task update data
@@ -221,6 +223,7 @@ export interface TaskUpdateData {
   progress?: number;
   labels?: string[];
   customFields?: Record<string, any>;
+  projectId?: string;
 }
 
 // Task filters
@@ -250,6 +253,7 @@ export interface TaskFilters {
   isOverdue?: boolean;
   isDueSoon?: boolean; // due within next 7 days
   mode?: TaskMode[];
+  projectId?: string;
 }
 
 // Task sort options
@@ -521,6 +525,7 @@ export interface CreateTaskInput extends Omit<TaskFormData, 'attachments' | 'lab
   boardId?: string;
   listId?: string;
   mode?: TaskMode;
+  projectId?: string;
 }
 
 export interface UpdateTaskInput extends Omit<TaskUpdateData, 'attachments' | 'labels'> {
@@ -533,6 +538,7 @@ export interface UpdateTaskInput extends Omit<TaskUpdateData, 'attachments' | 'l
   position?: number;
   boardId?: string;
   listId?: string;
+  projectId?: string;
 }
 
 export interface BulkUpdateInput {

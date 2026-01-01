@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import AddTaskInline from '../components/AddTaskInline';
+import { projectService } from '../services/firebase/project.service';
+import type { Project, ProjectMode } from '../types/project';
 
 interface Task {
   id: string;
@@ -30,6 +33,7 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [user, setUser] = useState<any>(null);
   const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
@@ -42,6 +46,11 @@ export default function Tasks() {
   const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
     return (localStorage.getItem('taskModeFilter') as any) || 'all';
   });
+
+  // Project state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
   useEffect(() => {
     const filterParam = searchParams.get('filter');
@@ -75,6 +84,29 @@ export default function Tasks() {
       loadTasks(currentUser.uid);
     }
   }, []);
+
+  // Subscribe to projects when user and modeFilter change
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (modeFilter === 'all') {
+      setSelectedProjectId(undefined);
+      setProjects([]);
+      return;
+    }
+
+    const unsubscribe = projectService.subscribeToProjects(
+      user.uid,
+      (projectList) => {
+        setProjects(projectList);
+        if (projectList.length === 0) {
+          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
+        }
+      },
+      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, modeFilter]);
 
   const loadTasks = async (userId: string) => {
     setLoading(true);
@@ -182,6 +214,55 @@ export default function Tasks() {
       });
       setShowAddForm(false);
       setEditingTask(null);
+
+      // Reload tasks
+      await loadTasks(user.uid);
+    } catch (error: any) {
+      console.error('Error saving task:', error);
+      alert(`Failed to save task: ${error.message}`);
+    }
+  };
+
+  const handleQuickAddTask = async (taskData: {
+    title: string;
+    description: string;
+    startDate: string;
+    startTime: string;
+    priority: 'low' | 'medium' | 'high';
+    tags: string[];
+    isRepeating: boolean;
+    repeatFrequency: 'daily' | 'weekly' | 'monthly';
+    repeatEndDate: string;
+    mode: 'personal' | 'professional';
+    subtasks?: { id: string; title: string; completed: boolean }[];
+  }) => {
+    if (!user) {
+      alert('You must be logged in to create a task');
+      return;
+    }
+
+    try {
+      const db = getFirestore();
+
+      const firestoreData = {
+        title: taskData.title,
+        description: taskData.description,
+        startDate: taskData.startDate,
+        startTime: taskData.startTime || null,
+        priority: taskData.priority,
+        tags: taskData.tags,
+        isRepeating: taskData.isRepeating,
+        repeatFrequency: taskData.isRepeating ? taskData.repeatFrequency : null,
+        repeatEndDate: taskData.isRepeating ? taskData.repeatEndDate : null,
+        status: 'todo',
+        userId: user.uid,
+        createdAt: Timestamp.now(),
+        mode: taskData.mode || 'personal',
+        subtasks: taskData.subtasks || []
+      };
+
+      await addDoc(collection(db, 'tasks'), firestoreData);
+      setShowQuickAdd(false);
 
       // Reload tasks
       await loadTasks(user.uid);
@@ -435,6 +516,13 @@ export default function Tasks() {
         const taskMode = task.mode || 'personal'; // default to personal for backward compatibility
         return taskMode === modeFilter;
       });
+    }
+
+    // Filter by project
+    if (selectedProjectId) {
+      filteredTasks = filteredTasks.filter(task =>
+        (task as any).projectId === selectedProjectId
+      );
     }
 
     // Filter by date
@@ -853,6 +941,70 @@ export default function Tasks() {
               </button>
             </div>
 
+            {/* Projects Filter */}
+            {modeFilter !== 'all' && projects.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <span>📁</span>
+                  <span className="font-medium">
+                    {selectedProjectId
+                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
+                      : 'All Projects'}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {selectedProjectId && (
+                  <button
+                    onClick={() => setSelectedProjectId(undefined)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            )}
+
+            {showProjectsPanel && modeFilter !== 'all' && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedProjectId(undefined);
+                      setShowProjectsPanel(false);
+                    }}
+                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                  >
+                    📋 All Projects
+                  </button>
+                  {projects.map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setShowProjectsPanel(false);
+                      }}
+                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
+                          ? 'bg-blue-100 text-blue-700 font-medium'
+                          : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                    >
+                      <span style={{ color: project.color }}>{project.icon}</span>
+                      <span className="truncate">{project.name}</span>
+                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Filters and Sort */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
               {/* Date Filter */}
@@ -948,8 +1100,8 @@ export default function Tasks() {
                         )}
                         {modeFilter === 'all' && (
                           <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-orange-100 text-orange-800'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-orange-100 text-orange-800'
                             }`}>
                             {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
                           </span>
@@ -1037,6 +1189,26 @@ export default function Tasks() {
           </div>
         </div>
       )}
+
+      {/* Floating Quick Add Button */}
+      {!showQuickAdd && !showAddForm && (
+        <button
+          onClick={() => setShowQuickAdd(true)}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50"
+          title="Quick Add Task"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      )}
+
+      {/* Quick Add Task Popup */}
+      <AddTaskInline
+        isOpen={showQuickAdd}
+        onSubmit={handleQuickAddTask}
+        onCancel={() => setShowQuickAdd(false)}
+      />
     </div>
   );
 }

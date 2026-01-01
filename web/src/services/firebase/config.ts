@@ -50,8 +50,8 @@ if (useEmulators) {
   }
 
   try {
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    console.log('🔧 Connected to Firestore emulator at 127.0.0.1:8080');
+    connectFirestoreEmulator(db, '127.0.0.1', 8081);
+    console.log('🔧 Connected to Firestore emulator at 127.0.0.1:8081');
   } catch (error: any) {
     // Ignore "already connected" errors (common during hot reload)
     if (error?.message?.includes('already been called') || error?.message?.includes('already connected')) {

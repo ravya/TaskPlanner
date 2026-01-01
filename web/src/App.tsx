@@ -9,6 +9,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Widget = lazy(() => import('./pages/Widget'));
+const StickiesDemo = lazy(() => import('./pages/StickiesDemo'));
+const WidgetOnly = lazy(() => import('./pages/WidgetOnly'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 
@@ -69,12 +71,16 @@ function App() {
           <Route path="/register" element={<Register />} />
         </Route>
 
+        {/* Standalone widget (has its own auth) */}
+        <Route path="/w" element={<WidgetOnly />} />
+
         {/* Protected routes */}
         <Route element={<ProtectedRouteWrapper />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/widget" element={<Widget />} />
+          <Route path="/stickies" element={<StickiesDemo />} />
         </Route>
 
         {/* Fallback */}

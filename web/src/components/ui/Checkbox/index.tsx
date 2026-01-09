@@ -58,9 +58,10 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(({
       ref={ref}
       type="checkbox"
       id={checkboxId}
-      className={checkboxClasses}
+      className="absolute opacity-0 w-0 h-0"
       disabled={disabled}
       checked={checked}
+      {...({} as any)}
       {...props}
       whileHover={!disabled ? { scale: 1.05 } : undefined}
       whileTap={!disabled ? { scale: 0.95 } : undefined}

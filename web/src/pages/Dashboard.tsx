@@ -1,7 +1,10 @@
 import { getAuth, signOut } from 'firebase/auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
+import AddTaskInline from '../components/AddTaskInline';
+import { projectService } from '../services/firebase/project.service';
+import type { Project, ProjectMode } from '../types/project';
 
 interface Task {
   id: string;
@@ -17,6 +20,10 @@ interface Task {
   repeatEndDate?: string;
   userId: string;
   createdAt: any;
+  completed?: boolean;
+  deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
+  isDeleted?: boolean; // Soft delete flag for parent recurring tasks
+  mode?: 'personal' | 'professional'; // Task mode
 }
 
 export default function Dashboard() {
@@ -27,6 +34,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [showAllTodayTasks, setShowAllTodayTasks] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
+    return (localStorage.getItem('taskModeFilter') as any) || 'all';
+  });
+
+  // Project state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -50,6 +66,158 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Subscribe to projects when user and modeFilter change
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (modeFilter === 'all') {
+      // When 'all' mode, don't filter by project
+      setSelectedProjectId(undefined);
+      setProjects([]);
+      return;
+    }
+
+    const unsubscribe = projectService.subscribeToProjects(
+      user.uid,
+      (projectList) => {
+        setProjects(projectList);
+        // Ensure default project exists
+        if (projectList.length === 0) {
+          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
+        }
+      },
+      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, modeFilter]);
+
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
+  const generateMissingRepeatingOccurrences = async (tasks: Task[], userId: string) => {
+    const db = getFirestore();
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const createdTasks: string[] = [];
+
+    for (const task of tasks) {
+      // Only process the original repeating task (not occurrences)
+      // Original tasks are those that match the original startDate
+      if (!task.isRepeating || !task.repeatFrequency || !task.startDate) continue;
+
+      // Skip if this is already an occurrence (check if there's a task with earlier date and same title)
+      const isOriginalTask = !tasks.some(t =>
+        t.id !== task.id &&
+        t.isRepeating === task.isRepeating &&
+        t.repeatFrequency === task.repeatFrequency &&
+        t.title === task.title &&
+        t.userId === task.userId &&
+        t.startDate < task.startDate
+      );
+
+      if (!isOriginalTask) continue; // Skip occurrences, only process originals
+
+      // Check if we should create occurrences for this repeating task
+      if (!shouldCreateNextOccurrence(task)) continue;
+
+      const originalDate = new Date(task.startDate);
+      const todayDate = new Date(today);
+
+      // Only generate occurrence for TODAY if it doesn't exist
+      // Don't carry forward missed occurrences from past dates
+      const occurrenceDate = today;
+
+      // Skip if today is before the original start date
+      if (todayDate < originalDate) continue;
+
+      // Check if occurrence already exists in current tasks list
+      const existingTask = tasks.find(t =>
+        t.title === task.title &&
+        t.startDate === occurrenceDate &&
+        t.userId === task.userId &&
+        t.isRepeating === task.isRepeating &&
+        t.repeatFrequency === task.repeatFrequency
+      );
+
+      // Also check database directly to avoid duplicates
+      if (!existingTask) {
+        const checkQuery = query(
+          collection(db, 'tasks'),
+          where('userId', '==', userId),
+          where('title', '==', task.title),
+          where('startDate', '==', occurrenceDate),
+          where('isRepeating', '==', true),
+          where('repeatFrequency', '==', task.repeatFrequency)
+        );
+        const checkSnapshot = await getDocs(checkQuery);
+
+        if (checkSnapshot.empty) {
+          // Check if this occurrence was explicitly deleted
+          const deletedOccurrences = task.deletedOccurrences || [];
+          if (deletedOccurrences.includes(occurrenceDate)) {
+            // Skip this occurrence - it was explicitly deleted by user
+            continue;
+          }
+
+          // Check if we're within the repeat end date
+          if (task.repeatEndDate) {
+            const endDate = new Date(task.repeatEndDate);
+            if (todayDate > endDate) continue;
+          }
+
+          // Create today's occurrence
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: occurrenceDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          try {
+            await addDoc(collection(db, 'tasks'), nextTaskData);
+            createdTasks.push(occurrenceDate);
+          } catch (error) {
+            console.error(`Error creating occurrence for ${occurrenceDate}:`, error);
+          }
+        }
+      }
+    }
+
+    return createdTasks.length > 0;
+  };
+
   const loadTasks = async (userId: string) => {
     setLoading(true);
     try {
@@ -58,20 +226,55 @@ export default function Dashboard() {
       const q = query(tasksRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
-      const loadedTasks: Task[] = [];
+      const allTasks: Task[] = [];
       querySnapshot.forEach((doc) => {
-        loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+        allTasks.push({ id: doc.id, ...doc.data() } as Task);
       });
 
-      setTasks(loadedTasks);
+      // Generate missing repeating task occurrences (using all tasks including soft-deleted)
+      const hasNewOccurrences = await generateMissingRepeatingOccurrences(allTasks, userId);
 
-      // Filter today's tasks
-      const today = new Date().toISOString().split('T')[0];
-      const todayTasks = loadedTasks.filter(task => {
-        if (task.startDate) {
-          return task.startDate === today;
+      // Reload tasks if new occurrences were created
+      if (hasNewOccurrences) {
+        const updatedSnapshot = await getDocs(q);
+        allTasks.length = 0; // Clear array
+        updatedSnapshot.forEach((doc) => {
+          allTasks.push({ id: doc.id, ...doc.data() } as Task);
+        });
+      }
+
+      // Filter out soft-deleted tasks for display
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const visibleTasks = allTasks.filter(t => {
+        // Filter out soft-deleted tasks
+        if (t.isDeleted) return false;
+
+        // For recurring tasks, hide past occurrences (both completed and incomplete)
+        // This prevents showing the original parent task when we have today's occurrence
+        if (t.isRepeating) {
+          const taskDate = t.startDate?.split('T')[0];
+          if (taskDate && taskDate < today) {
+            // Only show past recurring tasks if they're completed
+            // This allows viewing completed history but hides incomplete past tasks
+            if (t.status !== 'completed' && !t.completed) {
+              return false;
+            }
+          }
         }
-        return false;
+
+        return true;
+      });
+
+      setTasks(visibleTasks);
+
+      // Filter today's tasks - include repeating tasks even if previous day wasn't completed
+      const todayTasks = visibleTasks.filter(task => {
+        if (!task.startDate) return false;
+        // Ensure we're comparing dates correctly (YYYY-MM-DD format)
+        const taskDate = task.startDate.split('T')[0]; // Handle any time component
+        return taskDate === today;
       });
       setTodaysTasks(todayTasks);
     } catch (error) {
@@ -95,7 +298,8 @@ export default function Dashboard() {
     try {
       const db = getFirestore();
       const taskRef = doc(db, 'tasks', taskId);
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       await updateDoc(taskRef, {
         startDate: today,
@@ -132,6 +336,148 @@ export default function Dashboard() {
     }
   };
 
+  const handleCreateMissingOccurrence = async (task: Task) => {
+    try {
+      const db = getFirestore();
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      const taskData = {
+        title: task.title,
+        description: task.description,
+        startDate: today,
+        startTime: task.startTime || null,
+        status: 'todo',
+        priority: task.priority,
+        tags: task.tags || [],
+        isRepeating: task.isRepeating,
+        repeatFrequency: task.repeatFrequency,
+        repeatEndDate: task.repeatEndDate || null,
+        userId: task.userId,
+        createdAt: Timestamp.now(),
+        completed: false
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error creating missing occurrence:', error);
+      alert('Failed to create task');
+    }
+  };
+
+  const handleAddTaskInline = async (taskData: {
+    title: string;
+    description: string;
+    startDate: string;
+    startTime: string;
+    priority: 'low' | 'medium' | 'high';
+    tags: string[];
+    isRepeating: boolean;
+    repeatFrequency: 'daily' | 'weekly' | 'monthly';
+    repeatEndDate: string;
+    mode: 'personal' | 'professional';
+    subtasks?: { id: string; title: string; completed: boolean }[];
+    projectId?: string;
+  }) => {
+    if (!user) {
+      alert('You must be logged in to create a task');
+      return;
+    }
+
+    try {
+      const db = getFirestore();
+
+      const firestoreData: any = {
+        title: taskData.title,
+        description: taskData.description,
+        startDate: taskData.startDate,
+        startTime: taskData.startTime || null,
+        priority: taskData.priority,
+        tags: taskData.tags,
+        isRepeating: taskData.isRepeating,
+        repeatFrequency: taskData.isRepeating ? taskData.repeatFrequency : null,
+        repeatEndDate: taskData.isRepeating ? taskData.repeatEndDate : null,
+        status: 'todo',
+        userId: user.uid,
+        createdAt: Timestamp.now(),
+        mode: taskData.mode || 'personal',
+        subtasks: taskData.subtasks || []
+      };
+
+      // Add projectId if provided, or use currently selected project
+      if (taskData.projectId) {
+        firestoreData.projectId = taskData.projectId;
+      } else if (selectedProjectId) {
+        firestoreData.projectId = selectedProjectId;
+      }
+
+      await addDoc(collection(db, 'tasks'), firestoreData);
+      setShowAddForm(false);
+
+      // Reload tasks
+      await loadTasks(user.uid);
+    } catch (error: any) {
+      console.error('Error saving task:', error);
+      alert(`Failed to save task: ${error.message}`);
+    }
+  };
+
+  const handleToggleComplete = async (task: Task) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', task.id);
+      const newStatus = task.status === 'completed' ? 'todo' : 'completed';
+
+      await updateDoc(taskRef, {
+        status: newStatus,
+        completed: newStatus === 'completed',
+        completedAt: newStatus === 'completed' ? new Date() : null,
+        updatedAt: new Date()
+      });
+
+      // If task is being marked as complete and is repeating, create next occurrence
+      if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
+        const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        // Only create if next occurrence is in the future or today
+        if (nextDate >= today) {
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: nextDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          await addDoc(collection(db, 'tasks'), nextTaskData);
+        }
+      }
+
+      // Reload tasks
+      if (user) {
+        await loadTasks(user.uid);
+      }
+    } catch (error) {
+      console.error('Error toggling task:', error);
+      alert('Failed to update task');
+    }
+  };
+
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter(t => t.status === 'completed' || t.completed).length;
   const pendingTasks = tasks.filter(t => t.status !== 'completed' && !t.completed && t.status !== 'in_progress').length;
@@ -139,23 +485,30 @@ export default function Dashboard() {
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   // Get pending tasks from past days (not today, not completed, not ignored)
-  const today = new Date().toISOString().split('T')[0];
-  const pastPendingTasks = tasks.filter(t => {
-    if (t.status === 'completed' || t.completed) return false;
-    if ((t as any).ignored) return false; // Exclude ignored tasks
-    if (!t.startDate) return false;
-    return t.startDate < today;
+  // This includes both regular tasks and missing repeating task occurrences
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const pastPendingTasks: Task[] = [];
+
+  // First, add regular tasks from past days
+  tasks.forEach(t => {
+    if (t.status === 'completed' || t.completed) return;
+    if ((t as any).ignored) return;
+    if (!t.startDate) return;
+
+    // Exclude repetitive tasks from past pending list as requested
+    if (t.isRepeating) return;
+
+    const taskDate = t.startDate.split('T')[0];
+    if (taskDate < today) {
+      pastPendingTasks.push(t);
+    }
   });
 
-  const formatDateTime = (date: string, time?: string) => {
-    if (!date) return '';
-    const dateObj = new Date(date);
-    const dateStr = dateObj.toLocaleDateString();
-    if (time) {
-      return `${dateStr} ${time}`;
-    }
-    return dateStr;
-  };
+  // Note: Logic for finding missing repeating task occurrences has been removed
+  // as per requirement to not show past pending repetitive tasks.
+
+
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -192,6 +545,26 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Floating Add Task Button */}
+        {!showAddForm && (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50"
+            title="Add New Task"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
+
+        {/* Task Creation Form - New Compact Component */}
+        <AddTaskInline
+          isOpen={showAddForm}
+          onSubmit={handleAddTaskInline}
+          onCancel={() => setShowAddForm(false)}
+        />
+
         {/* Email Verification Banner - Only show if not verified and account < 1 week */}
         {showEmailVerification && (
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -219,6 +592,30 @@ export default function Dashboard() {
 
         {/* Task Statistics - 3 Main Tiles */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Today's Tasks */}
+          <Link
+            to="/tasks?filter=today"
+            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Today's Tasks</h3>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            <div className="text-4xl font-bold text-purple-600 mb-2">{todaysTasks.length}</div>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                {todaysTasks.filter(t => t.status === 'completed').length} completed
+              </p>
+              <span className="text-xs text-purple-600 font-medium">
+                View All →
+              </span>
+            </div>
+          </Link>
+
           {/* All Tasks */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center justify-between mb-4">
@@ -284,30 +681,6 @@ export default function Dashboard() {
               </span>
             </div>
           </Link>
-
-          {/* Today's Tasks */}
-          <Link
-            to="/tasks"
-            className="bg-white rounded-lg shadow-lg p-6 block hover:shadow-xl transition-shadow cursor-pointer"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Today's Tasks</h3>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            </div>
-            <div className="text-4xl font-bold text-purple-600 mb-2">{todaysTasks.length}</div>
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-500">
-                {todaysTasks.filter(t => t.status === 'completed').length} completed
-              </p>
-              <span className="text-xs text-purple-600 font-medium">
-                View All →
-              </span>
-            </div>
-          </Link>
         </div>
 
         {/* Pending Tasks from Past Days */}
@@ -345,23 +718,36 @@ export default function Dashboard() {
                       </p>
                     )}
                     <p className="text-xs text-orange-600">
-                      Originally scheduled: {new Date(task.startDate).toLocaleDateString()}
+                      {task.id.startsWith('missing-') ? (
+                        <>Missing occurrence from: {new Date(task.startDate).toLocaleDateString()} (Repeating task)</>
+                      ) : (
+                        <>Originally scheduled: {new Date(task.startDate).toLocaleDateString()}</>
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleMoveToToday(task.id)}
+                      onClick={() => {
+                        if (task.id.startsWith('missing-')) {
+                          // Create the missing occurrence
+                          handleCreateMissingOccurrence(task);
+                        } else {
+                          handleMoveToToday(task.id);
+                        }
+                      }}
                       className="px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700 font-medium whitespace-nowrap"
                     >
-                      Move to Today
+                      {task.id.startsWith('missing-') ? 'Create & Move to Today' : 'Move to Today'}
                     </button>
-                    <button
-                      onClick={() => handleIgnoreTask(task.id)}
-                      className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
-                      title="Ignore this task"
-                    >
-                      Ignore
-                    </button>
+                    {!task.id.startsWith('missing-') && (
+                      <button
+                        onClick={() => handleIgnoreTask(task.id)}
+                        className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
+                        title="Ignore this task"
+                      >
+                        Ignore
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -371,14 +757,121 @@ export default function Dashboard() {
 
         {/* Today's Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Today's Tasks</h2>
-            <Link
-              to="/tasks"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              View all tasks →
-            </Link>
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Today's Tasks</h2>
+              <Link
+                to="/tasks?filter=today"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                View all tasks →
+              </Link>
+            </div>
+
+            {/* Mode Filter Tabs */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => {
+                  setModeFilter('all');
+                  localStorage.setItem('taskModeFilter', 'all');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                All Modes
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('personal');
+                  localStorage.setItem('taskModeFilter', 'personal');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                🏠 Personal
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('professional');
+                  localStorage.setItem('taskModeFilter', 'professional');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                💼 Professional
+              </button>
+            </div>
+
+            {/* Projects Filter - Only show when a specific mode is selected */}
+            {modeFilter !== 'all' && projects.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <span>📁</span>
+                  <span className="font-medium">
+                    {selectedProjectId
+                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
+                      : 'All Projects'}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {selectedProjectId && (
+                  <button
+                    onClick={() => setSelectedProjectId(undefined)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Projects Dropdown Panel */}
+            {showProjectsPanel && modeFilter !== 'all' && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedProjectId(undefined);
+                      setShowProjectsPanel(false);
+                    }}
+                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                  >
+                    📋 All Projects
+                  </button>
+                  {projects.map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setShowProjectsPanel(false);
+                      }}
+                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                    >
+                      <span style={{ color: project.color }}>{project.icon}</span>
+                      <span className="truncate">{project.name}</span>
+                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -398,34 +891,58 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {(showAllTodayTasks ? todaysTasks : todaysTasks.slice(0, 5)).map((task) => (
-                <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'completed'}
-                    disabled
-                    className="h-5 w-5 text-blue-600 rounded"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`text-base font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                        {task.title}
-                      </h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
+              {(() => {
+                // Filter tasks by mode and project
+                let filteredTasks = modeFilter === 'all'
+                  ? todaysTasks
+                  : todaysTasks.filter(task => (task.mode || 'personal') === modeFilter);
+
+                // Further filter by project if one is selected
+                if (selectedProjectId) {
+                  filteredTasks = filteredTasks.filter(task =>
+                    (task as any).projectId === selectedProjectId
+                  );
+                }
+
+                const tasksToShow = showAllTodayTasks ? filteredTasks : filteredTasks.slice(0, 5);
+
+                return tasksToShow.map((task) => (
+                  <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={task.status === 'completed' || task.completed === true}
+                      onChange={() => handleToggleComplete(task)}
+                      className="h-5 w-5 text-blue-600 rounded cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-base font-medium ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          {task.title}
+                        </h3>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
+                          {task.priority}
+                        </span>
+                        {modeFilter === 'all' && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-orange-100 text-orange-800'
+                            }`}>
+                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
+                          </span>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className={`text-sm mt-1 ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {task.description}
+                        </p>
+                      )}
                     </div>
-                    {task.description && (
-                      <p className={`text-sm mt-1 ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {task.description}
-                      </p>
-                    )}
+                    <span className="text-xs text-gray-500">
+                      {task.startTime || 'All day'}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {task.startTime || 'All day'}
-                  </span>
-                </div>
-              ))}
+                ));
+              })()}
               {todaysTasks.length > 5 && (
                 <div className="p-4 text-center">
                   {!showAllTodayTasks ? (

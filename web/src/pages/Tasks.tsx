@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import AddTaskInline from '../components/AddTaskInline';
+import { projectService } from '../services/firebase/project.service';
+import type { Project, ProjectMode } from '../types/project';
 
 interface Task {
   id: string;
@@ -17,29 +20,59 @@ interface Task {
   repeatEndDate?: string;
   userId: string;
   createdAt: any;
+  completed?: boolean;
+  deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
+  isDeleted?: boolean; // Soft delete flag for parent recurring tasks
+  mode?: 'personal' | 'professional'; // Task mode
 }
 
 export default function Tasks() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const formRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline'>('priority');
+  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>(
+    (searchParams.get('filter') as any) || 'all'
+  );
+  const [customDateStart, setCustomDateStart] = useState<string>('');
+  const [customDateEnd, setCustomDateEnd] = useState<string>('');
+  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
+    return (localStorage.getItem('taskModeFilter') as any) || 'all';
+  });
+
+  // Project state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
+
+  useEffect(() => {
+    const filterParam = searchParams.get('filter');
+    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom'].includes(filterParam)) {
+      setDateFilter(filterParam as any);
+    }
+  }, [searchParams]);
 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    startDate: '',
+    startDate: (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    })(), // Default to today
     startTime: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     tags: '',
     isRepeating: false,
     repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: ''
+    repeatEndDate: '',
+    mode: 'personal' as 'personal' | 'professional'
   });
 
   useEffect(() => {
@@ -52,6 +85,29 @@ export default function Tasks() {
     }
   }, []);
 
+  // Subscribe to projects when user and modeFilter change
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (modeFilter === 'all') {
+      setSelectedProjectId(undefined);
+      setProjects([]);
+      return;
+    }
+
+    const unsubscribe = projectService.subscribeToProjects(
+      user.uid,
+      (projectList) => {
+        setProjects(projectList);
+        if (projectList.length === 0) {
+          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
+        }
+      },
+      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, modeFilter]);
+
   const loadTasks = async (userId: string) => {
     setLoading(true);
     try {
@@ -60,9 +116,25 @@ export default function Tasks() {
       const q = query(tasksRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const loadedTasks: Task[] = [];
       querySnapshot.forEach((doc) => {
-        loadedTasks.push({ id: doc.id, ...doc.data() } as Task);
+        const task = { id: doc.id, ...doc.data() } as Task;
+
+        // Filter out soft-deleted parent tasks
+        if (task.isDeleted) return;
+
+        // Filter out past incomplete recurring tasks (don't carry forward)
+        if (task.isRepeating && task.status !== 'completed' && !task.completed) {
+          const taskDate = task.startDate?.split('T')[0];
+          if (taskDate && taskDate < today) {
+            return; // Skip past incomplete recurring tasks
+          }
+        }
+
+        loadedTasks.push(task);
       });
 
       setTasks(loadedTasks);
@@ -92,10 +164,15 @@ export default function Tasks() {
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
+      // Use today's date if startDate is not set
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const taskStartDate = formData.startDate || today;
+
       const taskData = {
         title: formData.title,
         description: formData.description,
-        startDate: formData.startDate,
+        startDate: taskStartDate,
         startTime: formData.startTime || null,
         priority: formData.priority,
         tags: tagArray,
@@ -104,7 +181,8 @@ export default function Tasks() {
         repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
         status: 'todo',
         userId: user.uid,
-        createdAt: Timestamp.now()
+        createdAt: Timestamp.now(),
+        mode: formData.mode || 'personal'
       };
 
       if (editingTask) {
@@ -125,13 +203,14 @@ export default function Tasks() {
       setFormData({
         title: '',
         description: '',
-        startDate: '',
+        startDate: today, // Default to today
         startTime: '',
         priority: 'medium',
         tags: '',
         isRepeating: false,
         repeatFrequency: 'daily',
-        repeatEndDate: ''
+        repeatEndDate: '',
+        mode: 'personal'
       });
       setShowAddForm(false);
       setEditingTask(null);
@@ -144,18 +223,71 @@ export default function Tasks() {
     }
   };
 
+  const handleQuickAddTask = async (taskData: {
+    title: string;
+    description: string;
+    startDate: string;
+    startTime: string;
+    priority: 'low' | 'medium' | 'high';
+    tags: string[];
+    isRepeating: boolean;
+    repeatFrequency: 'daily' | 'weekly' | 'monthly';
+    repeatEndDate: string;
+    mode: 'personal' | 'professional';
+    subtasks?: { id: string; title: string; completed: boolean }[];
+  }) => {
+    if (!user) {
+      alert('You must be logged in to create a task');
+      return;
+    }
+
+    try {
+      const db = getFirestore();
+
+      const firestoreData = {
+        title: taskData.title,
+        description: taskData.description,
+        startDate: taskData.startDate,
+        startTime: taskData.startTime || null,
+        priority: taskData.priority,
+        tags: taskData.tags,
+        isRepeating: taskData.isRepeating,
+        repeatFrequency: taskData.isRepeating ? taskData.repeatFrequency : null,
+        repeatEndDate: taskData.isRepeating ? taskData.repeatEndDate : null,
+        status: 'todo',
+        userId: user.uid,
+        createdAt: Timestamp.now(),
+        mode: taskData.mode || 'personal',
+        subtasks: taskData.subtasks || []
+      };
+
+      await addDoc(collection(db, 'tasks'), firestoreData);
+      setShowQuickAdd(false);
+
+      // Reload tasks
+      await loadTasks(user.uid);
+    } catch (error: any) {
+      console.error('Error saving task:', error);
+      alert(`Failed to save task: ${error.message}`);
+    }
+  };
+
   const handleEditTask = (task: Task) => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     setEditingTask(task);
     setFormData({
       title: task.title,
       description: task.description || '',
-      startDate: task.startDate || '',
+      startDate: task.startDate || today, // Default to today if not set
       startTime: task.startTime || '',
       priority: task.priority,
       tags: task.tags ? task.tags.join(', ') : '',
       isRepeating: task.isRepeating || false,
       repeatFrequency: task.repeatFrequency || 'daily',
-      repeatEndDate: task.repeatEndDate || ''
+      repeatEndDate: task.repeatEndDate || '',
+      mode: (task.mode as any) || 'personal'
     });
     setShowAddForm(true);
 
@@ -165,29 +297,160 @@ export default function Tasks() {
     }, 100);
   };
 
+  const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'daily':
+        date.setDate(date.getDate() + 1);
+        break;
+      case 'weekly':
+        date.setDate(date.getDate() + 7);
+        break;
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  };
+
+  const shouldCreateNextOccurrence = (task: Task): boolean => {
+    if (!task.isRepeating || !task.repeatFrequency) return false;
+    if (task.repeatEndDate) {
+      const endDate = new Date(task.repeatEndDate);
+      const nextDate = new Date(getNextOccurrenceDate(task.startDate, task.repeatFrequency));
+      return nextDate <= endDate;
+    }
+    return true; // No end date, repeat indefinitely
+  };
+
   const handleToggleComplete = async (task: Task) => {
     try {
       const db = getFirestore();
       const taskRef = doc(db, 'tasks', task.id);
       const newStatus = task.status === 'completed' ? 'todo' : 'completed';
-      await updateDoc(taskRef, { status: newStatus });
+
+      await updateDoc(taskRef, {
+        status: newStatus,
+        completed: newStatus === 'completed',
+        completedAt: newStatus === 'completed' ? new Date() : null,
+        updatedAt: new Date()
+      });
+
+      // If task is being marked as complete and is repeating, create next occurrence
+      if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
+        const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
+        const now = new Date();
+        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        // Only create if next occurrence is in the future or today
+        if (nextDate >= today) {
+          const nextTaskData = {
+            title: task.title,
+            description: task.description,
+            startDate: nextDate,
+            startTime: task.startTime || null,
+            status: 'todo',
+            priority: task.priority,
+            tags: task.tags || [],
+            isRepeating: task.isRepeating,
+            repeatFrequency: task.repeatFrequency,
+            repeatEndDate: task.repeatEndDate || null,
+            userId: task.userId,
+            createdAt: Timestamp.now(),
+            completed: false
+          };
+
+          await addDoc(collection(db, 'tasks'), nextTaskData);
+        }
+      }
 
       if (user) {
         loadTasks(user.uid);
       }
     } catch (error) {
       console.error('Error toggling task:', error);
+      alert('Failed to update task');
     }
   };
 
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ show: boolean; taskId: string | null }>({
+    show: false,
+    taskId: null
+  });
+
+  // ... (existing useEffect)
+
+  // ... (existing loadTasks)
+
+  // ... (existing handleAddTask)
+
+  // ... (existing handleEditTask)
+
+  // ... (existing getNextOccurrenceDate)
+
+  // ... (existing shouldCreateNextOccurrence)
+
+  // ... (existing handleToggleComplete)
+
+  const confirmDeleteTask = (taskId: string) => {
+    setDeleteConfirmation({ show: true, taskId });
+  };
+
+  const handleDeleteTask = async () => {
+    if (!deleteConfirmation.taskId) return;
+
+    const taskId = deleteConfirmation.taskId;
+    const taskToDelete = tasks.find(t => t.id === taskId);
+    setDeleteConfirmation({ show: false, taskId: null });
 
     try {
       const db = getFirestore();
-      const taskRef = doc(db, 'tasks', taskId);
-      await deleteDoc(taskRef);
+
+      if (taskToDelete?.isRepeating && taskToDelete.startDate) {
+        // Find all occurrences of this recurring task
+        const allOccurrences = tasks
+          .filter(t =>
+            t.isRepeating &&
+            t.title === taskToDelete.title &&
+            t.repeatFrequency === taskToDelete.repeatFrequency &&
+            t.userId === taskToDelete.userId
+          )
+          .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+        const parentTask = allOccurrences[0];
+        const isParentTask = parentTask.id === taskId;
+        const occurrenceDate = taskToDelete.startDate.split('T')[0];
+
+        if (isParentTask) {
+          // Soft delete the parent task - keep it in DB but mark as deleted
+          const parentRef = doc(db, 'tasks', taskId);
+          const deletedOccurrences = parentTask.deletedOccurrences || [];
+
+          await updateDoc(parentRef, {
+            isDeleted: true,
+            deletedOccurrences: [...deletedOccurrences, occurrenceDate]
+          });
+        } else {
+          // Update parent's deletedOccurrences and hard delete this occurrence
+          const parentRef = doc(db, 'tasks', parentTask.id);
+          const deletedOccurrences = parentTask.deletedOccurrences || [];
+
+          if (!deletedOccurrences.includes(occurrenceDate)) {
+            await updateDoc(parentRef, {
+              deletedOccurrences: [...deletedOccurrences, occurrenceDate]
+            });
+          }
+
+          // Hard delete the occurrence
+          const taskRef = doc(db, 'tasks', taskId);
+          await deleteDoc(taskRef);
+        }
+      } else {
+        // Non-recurring task - just delete it
+        const taskRef = doc(db, 'tasks', taskId);
+        await deleteDoc(taskRef);
+      }
 
       // Reload tasks
       if (user) {
@@ -195,6 +458,7 @@ export default function Tasks() {
       }
     } catch (error) {
       console.error('Error deleting task:', error);
+      alert('Failed to delete task');
     }
   };
 
@@ -246,6 +510,53 @@ export default function Tasks() {
       filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
     }
 
+    // Filter by mode
+    if (modeFilter !== 'all') {
+      filteredTasks = filteredTasks.filter(task => {
+        const taskMode = task.mode || 'personal'; // default to personal for backward compatibility
+        return taskMode === modeFilter;
+      });
+    }
+
+    // Filter by project
+    if (selectedProjectId) {
+      filteredTasks = filteredTasks.filter(task =>
+        (task as any).projectId === selectedProjectId
+      );
+    }
+
+    // Filter by date
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      filteredTasks = filteredTasks.filter(task => {
+        if (!task.startDate) return false;
+        const taskDate = task.startDate.split('T')[0];
+
+        if (dateFilter === 'today') {
+          return taskDate === today;
+        } else if (dateFilter === 'thisWeek') {
+          const taskDateObj = new Date(taskDate);
+          const todayObj = new Date(today);
+          const firstDayOfWeek = new Date(todayObj);
+          firstDayOfWeek.setDate(todayObj.getDate() - todayObj.getDay()); // Sunday
+          const lastDayOfWeek = new Date(todayObj);
+          lastDayOfWeek.setDate(todayObj.getDate() + (6 - todayObj.getDay())); // Saturday
+          return taskDateObj >= firstDayOfWeek && taskDateObj <= lastDayOfWeek;
+        } else if (dateFilter === 'thisMonth') {
+          const taskDateObj = new Date(taskDate);
+          const todayObj = new Date(today);
+          return taskDateObj.getMonth() === todayObj.getMonth() && taskDateObj.getFullYear() === todayObj.getFullYear();
+        } else if (dateFilter === 'custom') {
+          if (customDateStart && taskDate < customDateStart) return false;
+          if (customDateEnd && taskDate > customDateEnd) return false;
+          return true;
+        }
+        return true;
+      });
+    }
+
     // Separate completed and active tasks
     const completedTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
     const activeTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
@@ -285,6 +596,17 @@ export default function Tasks() {
         });
         break;
 
+      case 'date':
+        sortedActiveTasks = activeTasks.sort((a, b) => {
+          // Sort by date (ascending - earliest first)
+          if (!a.startDate && !b.startDate) return 0;
+          if (!a.startDate) return 1; // Tasks without dates go to end
+          if (!b.startDate) return -1;
+
+          return a.startDate.localeCompare(b.startDate);
+        });
+        break;
+
       default:
         sortedActiveTasks = activeTasks;
     }
@@ -309,31 +631,22 @@ export default function Tasks() {
 
   const sortedTasks = getFilteredAndSortedTasks();
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'todo': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ... (Header) ... */}
       <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 sm:py-6 gap-3 sm:gap-0">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tasks</h1>
             </div>
-            <div className="flex items-center gap-4">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
+              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 text-center sm:text-left">
                 ← Back to Dashboard
               </Link>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
               >
                 Logout
               </button>
@@ -343,7 +656,7 @@ export default function Tasks() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Add Task Button */}
         <div className="mb-6">
           <button
@@ -359,10 +672,11 @@ export default function Tasks() {
                 tags: '',
                 isRepeating: false,
                 repeatFrequency: 'daily',
-                repeatEndDate: ''
+                repeatEndDate: '',
+                mode: 'personal'
               });
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+            className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
           >
             {showAddForm ? '✕ Cancel' : '+ Add New Task'}
           </button>
@@ -375,6 +689,7 @@ export default function Tasks() {
               {editingTask ? 'Edit Task' : 'Create New Task'}
             </h2>
             <form onSubmit={handleAddTask} className="space-y-4">
+              {/* ... (Form fields) ... */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Task Title *
@@ -407,7 +722,7 @@ export default function Tasks() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date
                 </label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <input
                       type="date"
@@ -429,7 +744,7 @@ export default function Tasks() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Priority
@@ -459,6 +774,22 @@ export default function Tasks() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mode
+                  </label>
+                  <select
+                    value={formData.mode}
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'personal' | 'professional' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="personal">🏠 Personal</option>
+                    <option value="professional">💼 Professional</option>
+                  </select>
+                </div>
+              </div>
+
               {/* Repeating Task Section */}
               <div className="border-t pt-4">
                 <div className="flex items-center mb-4">
@@ -476,7 +807,7 @@ export default function Tasks() {
 
                 {formData.isRepeating && (
                   <div className="ml-6 space-y-3 bg-blue-50 p-4 rounded-md">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Repeat Frequency
@@ -536,34 +867,193 @@ export default function Tasks() {
 
         {/* Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Your Tasks ({sortedTasks.length})</h2>
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold mb-4">Your Tasks ({sortedTasks.length})</h2>
+
+            {/* Status Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'all'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                All ({tasks.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('active')}
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'active'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('completed')}
+                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'completed'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})
+              </button>
+            </div>
+
+            {/* Mode Filter Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => {
+                  setModeFilter('all');
+                  localStorage.setItem('taskModeFilter', 'all');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                All Modes
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('personal');
+                  localStorage.setItem('taskModeFilter', 'personal');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                🏠 Personal
+              </button>
+              <button
+                onClick={() => {
+                  setModeFilter('professional');
+                  localStorage.setItem('taskModeFilter', 'professional');
+                }}
+                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
+                  ? 'border-b-2 border-green-600 text-green-600'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                💼 Professional
+              </button>
+            </div>
+
+            {/* Projects Filter */}
+            {modeFilter !== 'all' && projects.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <span>📁</span>
+                  <span className="font-medium">
+                    {selectedProjectId
+                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
+                      : 'All Projects'}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {selectedProjectId && (
+                  <button
+                    onClick={() => setSelectedProjectId(undefined)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+            )}
+
+            {showProjectsPanel && modeFilter !== 'all' && (
+              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedProjectId(undefined);
+                      setShowProjectsPanel(false);
+                    }}
+                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                  >
+                    📋 All Projects
+                  </button>
+                  {projects.map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setShowProjectsPanel(false);
+                      }}
+                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
+                          ? 'bg-blue-100 text-blue-700 font-medium'
+                          : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                    >
+                      <span style={{ color: project.color }}>{project.icon}</span>
+                      <span className="truncate">{project.name}</span>
+                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Filters and Sort */}
-            <div className="flex items-center gap-4">
-              {/* Status Filter */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Filter:</label>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
+              {/* Date Filter */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                <label className="text-sm font-medium text-gray-700">Date:</label>
                 <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'completed')}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom')}
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">All Tasks ({tasks.length})</option>
-                  <option value="active">Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})</option>
-                  <option value="completed">Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})</option>
+                  <option value="all">All Dates</option>
+                  <option value="today">Today</option>
+                  <option value="thisWeek">This Week</option>
+                  <option value="thisMonth">This Month</option>
+                  <option value="custom">Custom Range</option>
                 </select>
               </div>
 
+              {/* Custom Date Range */}
+              {dateFilter === 'custom' && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="date"
+                    value={customDateStart}
+                    onChange={(e) => setCustomDateStart(e.target.value)}
+                    placeholder="Start Date"
+                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-gray-500 text-center sm:text-left">to</span>
+                  <input
+                    type="date"
+                    value={customDateEnd}
+                    onChange={(e) => setCustomDateEnd(e.target.value)}
+                    placeholder="End Date"
+                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
               {/* Sort Dropdown */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
                 <label className="text-sm font-medium text-gray-700">Sort by:</label>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline')}
-                  className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline' | 'date')}
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="priority">Priority (High to Low)</option>
+                  <option value="date">Date (Earliest First)</option>
                   <option value="time">Date & Time</option>
                   <option value="deadline">Deadline (Nearest First)</option>
                 </select>
@@ -584,75 +1074,85 @@ export default function Tasks() {
           ) : (
             <div className="divide-y divide-gray-200">
               {sortedTasks.map((task) => (
-                <div key={task.id} className="p-4 hover:bg-gray-50 flex items-start gap-3">
-                  {/* Checkbox */}
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'completed'}
-                    onChange={() => handleToggleComplete(task)}
-                    className="mt-1 h-5 w-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                  />
+                <div key={task.id} className="p-3 sm:p-4 hover:bg-gray-50 flex flex-col sm:flex-row items-start gap-3">
+                  <div className="flex items-start gap-3 w-full">
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={task.status === 'completed'}
+                      onChange={() => handleToggleComplete(task)}
+                      className="mt-1 h-5 w-5 min-w-[20px] text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                    />
 
-                  {/* Task Content */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className={`text-base font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                        {task.title}
-                      </h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                      {task.isRepeating && (
-                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800">
-                          🔄 {task.repeatFrequency}
+                    {/* Task Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className={`text-sm sm:text-base font-medium break-words ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          {task.title}
+                        </h3>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${getPriorityColor(task.priority)}`}>
+                          {task.priority}
                         </span>
-                      )}
-                    </div>
-
-                    {task.description && (
-                      <p className={`text-sm mb-1 ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {task.description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-1">
-                      {task.startDate && (
-                        <span>
-                          📅 {formatDateTime(task.startDate, task.startTime)}
-                        </span>
-                      )}
-                      {task.isRepeating && task.repeatEndDate && (
-                        <span>
-                          🔚 Until: {new Date(task.repeatEndDate).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-
-                    {task.tags && task.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {task.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded"
-                          >
-                            #{tag}
+                        {task.isRepeating && (
+                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800 whitespace-nowrap">
+                            🔄 {task.repeatFrequency}
                           </span>
-                        ))}
+                        )}
+                        {modeFilter === 'all' && (
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-orange-100 text-orange-800'
+                            }`}>
+                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
+                          </span>
+                        )}
                       </div>
-                    )}
+
+                      {task.description && (
+                        <p className={`text-xs sm:text-sm mb-1 break-words ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {task.description}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 sm:gap-3 text-xs text-gray-500 mb-1">
+                        {task.startDate && (
+                          <span className="whitespace-nowrap">
+                            📅 {formatDateTime(task.startDate, task.startTime)}
+                          </span>
+                        )}
+                        {task.isRepeating && task.repeatEndDate && (
+                          <span className="whitespace-nowrap">
+                            🔚 Until: {new Date(task.repeatEndDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {task.tags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded whitespace-nowrap"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex sm:flex-col gap-2 w-full sm:w-auto ml-8 sm:ml-0">
                     <button
                       onClick={() => handleEditTask(task)}
-                      className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDeleteTask(task.id)}
-                      className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                      onClick={() => confirmDeleteTask(task.id)}
+                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
                     >
                       Delete
                     </button>
@@ -663,6 +1163,52 @@ export default function Tasks() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmation({ show: false, taskId: null })}>
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Task</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this task? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirmation({ show: false, taskId: null })}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteTask}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Quick Add Button */}
+      {!showQuickAdd && !showAddForm && (
+        <button
+          onClick={() => setShowQuickAdd(true)}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50"
+          title="Quick Add Task"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      )}
+
+      {/* Quick Add Task Popup */}
+      <AddTaskInline
+        isOpen={showQuickAdd}
+        onSubmit={handleQuickAddTask}
+        onCancel={() => setShowQuickAdd(false)}
+      />
     </div>
   );
 }

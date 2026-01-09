@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "574857486152",
+    "project_id": "taskplanner-mvp",
+    "storage_bucket": "taskplanner-mvp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:574857486152:android:cf04078d90fb9d70ad9d7d",
+        "android_client_info": {
+          "package_name": "com.taskplanner.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "574857486152-k8qa5f05bev6mt9p4kam7cc642ts2rmq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBe7-BDx1ABULxBjmekZpJIUeTZGrj910g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "574857486152-k8qa5f05bev6mt9p4kam7cc642ts2rmq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "574857486152-s4iu7p7rsnp2qg1odd7kuifsg3ns6ekn.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.taskplanner.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

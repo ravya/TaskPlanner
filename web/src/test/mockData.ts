@@ -4,8 +4,13 @@ export const mockUser = {
   displayName: 'Test User',
   photoURL: 'https://example.com/photo.jpg',
   emailVerified: true,
-  createdAt: new Date('2024-01-01'),
-  updatedAt: new Date('2024-01-01'),
+  createdAt: new Date('2024-01-01').toISOString(),
+  updatedAt: new Date('2024-01-01').toISOString(),
+  lastLoginAt: new Date('2024-01-01').toISOString(),
+  role: 'user',
+  isActive: true,
+  firstName: 'Test',
+  lastName: 'User',
 };
 
 export const mockTask = {

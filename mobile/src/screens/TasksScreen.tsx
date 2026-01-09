@@ -1,432 +1,724 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  RefreshControl,
-  Modal,
+    View,
+    Text,
+    FlatList,
+    TouchableOpacity,
+    StyleSheet,
+    RefreshControl,
+    Alert,
+    TextInput,
+    Modal,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useAuth } from '../hooks/useAuth';
-import { taskService } from '../services/taskService';
-import { Task } from '../types/Task';
-import { TaskForm } from '../components/tasks/TaskForm';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTasks, useAuth } from '../hooks';
+import { TaskCard } from '../components/TaskCard';
+import { EmptyState, LoadingState } from '../components/EmptyState';
+import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
+import { createTask, toggleTaskComplete, bulkToggleComplete, deleteTask, updateTask } from '../services/firebase';
+import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
-interface Props {
-  navigation: any;
+export function TasksScreen() {
+    const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const { tasks, loading, refresh } = useTasks(user?.uid, { includeCompleted: true, realtime: true });
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredTasks = tasks.filter((task) => {
+        if (modeFilter !== 'all' && task.mode !== modeFilter) return false;
+        if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        return true;
+    });
+
+    const isMultiSelectMode = selectedIds.size > 0;
+
+    const handleLongPress = useCallback((taskId: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(taskId)) {
+                next.delete(taskId);
+            } else {
+                next.add(taskId);
+            }
+            return next;
+        });
+    }, []);
+
+    const handleTaskPress = useCallback((task: Task) => {
+        if (isMultiSelectMode) {
+            handleLongPress(task.id);
+        } else {
+            setEditingTask(task);
+        }
+    }, [isMultiSelectMode, handleLongPress]);
+
+    const handleToggleComplete = useCallback(async (task: Task) => {
+        if (!user) return;
+        try {
+            await toggleTaskComplete(user.uid, task.id, !task.completed);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update task');
+        }
+    }, [user]);
+
+    const handleBulkComplete = useCallback(async () => {
+        if (!user || selectedIds.size === 0) return;
+        try {
+            await bulkToggleComplete(user.uid, Array.from(selectedIds), true);
+            setSelectedIds(new Set());
+        } catch (error) {
+            Alert.alert('Error', 'Failed to complete tasks');
+        }
+    }, [user, selectedIds]);
+
+    const handleBulkDelete = useCallback(async () => {
+        if (!user || selectedIds.size === 0) return;
+        try {
+            for (const id of selectedIds) {
+                await deleteTask(user.uid, id);
+            }
+            setSelectedIds(new Set());
+        } catch (error) {
+            Alert.alert('Error', 'Failed to delete tasks');
+        }
+    }, [user, selectedIds]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedIds(new Set());
+    }, []);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await refresh();
+        setRefreshing(false);
+    }, [refresh]);
+
+    if (loading && tasks.length === 0) {
+        return <LoadingState message="Loading tasks..." />;
+    }
+
+    return (
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+            {/* Header */}
+            <View style={styles.header}>
+                <Text style={styles.title}>Tasks</Text>
+                <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
+                    <Text style={styles.addButtonText}>+ Add</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Search */}
+            <View style={styles.searchContainer}>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search tasks..."
+                    placeholderTextColor={colors.textTertiary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+            </View>
+
+            {/* Mode Filter - Home/Work */}
+            <View style={styles.filterRow}>
+                {(['all', 'home', 'work'] as const).map((mode) => (
+                    <TouchableOpacity
+                        key={mode}
+                        style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
+                        onPress={() => setModeFilter(mode)}
+                    >
+                        <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
+                            {mode === 'all' ? 'All' : mode === 'home' ? 'Home' : 'Work'}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            {/* Multi-select toolbar - Icons only */}
+            {isMultiSelectMode && (
+                <View style={styles.toolbar}>
+                    <Text style={styles.toolbarText}>{selectedIds.size}</Text>
+                    <View style={styles.toolbarActions}>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkComplete}>
+                            <Text style={styles.toolbarIcon}>✓</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.toolbarIconBtn, styles.toolbarIconBtnDanger]} onPress={handleBulkDelete}>
+                            <Text style={styles.toolbarIcon}>🗑</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={clearSelection}>
+                            <Text style={styles.toolbarIcon}>✕</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {/* Task List */}
+            <FlatList
+                data={filteredTasks}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                    <TaskCard
+                        task={item}
+                        selected={selectedIds.has(item.id)}
+                        onPress={() => handleTaskPress(item)}
+                        onLongPress={() => handleLongPress(item.id)}
+                        onToggleComplete={() => handleToggleComplete(item)}
+                    />
+                )}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                ListEmptyComponent={
+                    <EmptyState icon="☐" title="No tasks" subtitle="Tap + Add to create a task" />
+                }
+            />
+
+            {/* Add Task Modal */}
+            <AddTaskModal
+                visible={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                userId={user?.uid}
+            />
+
+            {/* Edit Task Modal */}
+            {editingTask && (
+                <EditTaskModal
+                    visible={!!editingTask}
+                    task={editingTask}
+                    onClose={() => setEditingTask(null)}
+                    userId={user?.uid}
+                />
+            )}
+        </View>
+    );
 }
 
-export const TasksScreen: React.FC<Props> = ({ navigation }) => {
-  const { user } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+// Add Task Modal
+function AddTaskModal({
+    visible,
+    onClose,
+    userId,
+}: {
+    visible: boolean;
+    onClose: () => void;
+    userId?: string;
+}) {
+    const [title, setTitle] = useState('');
+    const [mode, setMode] = useState<TaskMode>('home');
+    const [label, setLabel] = useState<TaskLabel>('none');
+    const [showLabelPicker, setShowLabelPicker] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-  const loadTasks = async () => {
-    if (!user) return;
+    const handleSubmit = async () => {
+        if (!userId || !title.trim()) return;
 
-    setLoading(true);
-    try {
-      const userTasks = await taskService.getUserTasks(user.uid);
-      setTasks(userTasks);
-    } catch (error) {
-      console.error('Error loading tasks:', error);
-      Alert.alert('Error', 'Failed to load tasks');
-    } finally {
-      setLoading(false);
-    }
-  };
+        try {
+            setLoading(true);
+            await createTask(userId, {
+                title: title.trim(),
+                mode,
+                label,
+                dueDate: new Date(),
+            });
+            setTitle('');
+            setLabel('none');
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to create task');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadTasks();
-    }, [user])
-  );
+    const handleClose = () => {
+        setTitle('');
+        setLabel('none');
+        onClose();
+    };
 
-  const handleAddTask = () => {
-    setEditingTask(null);
-    setShowForm(true);
-  };
+    const selectedLabel = DEFAULT_LABELS.find((l) => l.id === label);
 
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setShowForm(true);
-  };
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
+                <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
+                    <Text style={modalStyles.title}>New Task</Text>
 
-  const handleDeleteTask = (task: Task) => {
-    Alert.alert('Delete Task', 'Are you sure you want to delete this task?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await taskService.deleteTask(task.id);
-            await loadTasks();
-          } catch (error) {
-            Alert.alert('Error', 'Failed to delete task');
-          }
-        },
-      },
-    ]);
-  };
+                    <TextInput
+                        style={modalStyles.input}
+                        placeholder="What needs to be done?"
+                        placeholderTextColor={colors.textTertiary}
+                        value={title}
+                        onChangeText={setTitle}
+                        autoFocus
+                    />
 
-  const handleFormClose = () => {
-    setShowForm(false);
-    setEditingTask(null);
-  };
-
-  const handleFormSuccess = async () => {
-    setShowForm(false);
-    setEditingTask(null);
-    await loadTasks();
-  };
-
-  const toggleTaskStatus = async (task: Task) => {
-    try {
-      await taskService.toggleTaskStatus(task);
-      await loadTasks();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update task');
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return '#fee2e2';
-      case 'medium':
-        return '#fef3c7';
-      case 'low':
-        return '#d1fae5';
-      default:
-        return '#f3f4f6';
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back to Home</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Your Tasks ({tasks.length})</Text>
-      </View>
-
-      {/* Add Task Button */}
-      <View style={styles.addButtonContainer}>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddTask}>
-          <Text style={styles.addButtonText}>+ Add New Task</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Tasks List */}
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadTasks} />}
-      >
-        {tasks.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              No tasks yet. Click 'Add New Task' to create one!
-            </Text>
-          </View>
-        ) : (
-          tasks.map((task) => (
-            <View key={task.id} style={styles.taskCard}>
-              <View style={styles.taskHeader}>
-                <TouchableOpacity
-                  style={styles.taskCheckbox}
-                  onPress={() => toggleTaskStatus(task)}
-                >
-                  {task.status === 'completed' && (
-                    <Text style={styles.taskCheckboxChecked}>✓</Text>
-                  )}
-                </TouchableOpacity>
-
-                <View style={styles.taskInfo}>
-                  <Text
-                    style={[
-                      styles.taskTitle,
-                      task.status === 'completed' && styles.taskTitleCompleted,
-                    ]}
-                  >
-                    {task.title}
-                  </Text>
-
-                  <View style={styles.taskBadges}>
-                    <View
-                      style={[
-                        styles.priorityBadge,
-                        { backgroundColor: getPriorityColor(task.priority) },
-                      ]}
-                    >
-                      <Text style={styles.priorityText}>{task.priority}</Text>
+                    {/* Icon toolbar */}
+                    <View style={modalStyles.iconToolbar}>
+                        <TouchableOpacity
+                            style={modalStyles.toolbarItem}
+                            onPress={() => setShowLabelPicker(!showLabelPicker)}
+                        >
+                            <Text style={modalStyles.toolbarIconText}>🏷️</Text>
+                            {label !== 'none' && (
+                                <View style={[modalStyles.labelDot, { backgroundColor: selectedLabel?.color }]} />
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIconText}>📅</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIconText}>🔄</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIconText}>☑️</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    {task.isRepeating && task.repeatFrequency && (
-                      <View style={styles.repeatBadge}>
-                        <Text style={styles.repeatText}>🔄 {task.repeatFrequency}</Text>
-                      </View>
+                    {/* Label picker */}
+                    {showLabelPicker && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                            {DEFAULT_LABELS.map((l) => (
+                                <TouchableOpacity
+                                    key={l.id}
+                                    style={[
+                                        modalStyles.labelChip,
+                                        { borderColor: l.color },
+                                        label === l.id && { backgroundColor: l.color + '20' },
+                                    ]}
+                                    onPress={() => {
+                                        setLabel(l.id);
+                                        setShowLabelPicker(false);
+                                    }}
+                                >
+                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                    <Text style={modalStyles.labelText}>{l.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     )}
-                  </View>
 
-                  {task.description && (
-                    <Text
-                      style={[
-                        styles.taskDescription,
-                        task.status === 'completed' && styles.taskDescriptionCompleted,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {task.description}
-                    </Text>
-                  )}
-
-                  <View style={styles.taskMeta}>
-                    <Text style={styles.taskMetaText}>
-                      📅 {task.startDate}
-                      {task.startTime ? ` ${task.startTime}` : ' All day'}
-                    </Text>
-
-                    {task.isRepeating && task.repeatEndDate && (
-                      <Text style={styles.taskMetaText}>🔚 Until: {task.repeatEndDate}</Text>
-                    )}
-                  </View>
-
-                  {task.tags.length > 0 && (
-                    <View style={styles.tagsContainer}>
-                      {task.tags.map((tag, index) => (
-                        <View key={index} style={styles.tag}>
-                          <Text style={styles.tagText}>#{tag}</Text>
+                    <View style={modalStyles.row}>
+                        <View style={modalStyles.modeToggle}>
+                            <TouchableOpacity
+                                style={[modalStyles.modeButton, mode === 'home' && modalStyles.modeButtonActive]}
+                                onPress={() => setMode('home')}
+                            >
+                                <Text style={[modalStyles.modeText, mode === 'home' && modalStyles.modeTextActive]}>Home</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.modeButton, mode === 'work' && modalStyles.modeButtonActive]}
+                                onPress={() => setMode('work')}
+                            >
+                                <Text style={[modalStyles.modeText, mode === 'work' && modalStyles.modeTextActive]}>Work</Text>
+                            </TouchableOpacity>
                         </View>
-                      ))}
+
+                        <TouchableOpacity
+                            style={[modalStyles.submitButton, (!title.trim() || loading) && modalStyles.submitDisabled]}
+                            onPress={handleSubmit}
+                            disabled={!title.trim() || loading}
+                        >
+                            <Text style={modalStyles.submitText}>Add</Text>
+                        </TouchableOpacity>
                     </View>
-                  )}
                 </View>
-              </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
 
-              <View style={styles.taskActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.editButton]}
-                  onPress={() => handleEditTask(task)}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
+// Edit Task Modal
+function EditTaskModal({
+    visible,
+    task,
+    onClose,
+    userId,
+}: {
+    visible: boolean;
+    task: Task;
+    onClose: () => void;
+    userId?: string;
+}) {
+    const [title, setTitle] = useState(task.title);
+    const [mode, setMode] = useState<TaskMode>(task.mode);
+    const [label, setLabel] = useState<TaskLabel>((task as any).label || 'none');
+    const [loading, setLoading] = useState(false);
 
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.deleteButton]}
-                  onPress={() => handleDeleteTask(task)}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
+    const handleSave = async () => {
+        if (!userId || !title.trim()) return;
 
-      {/* Task Form Modal */}
-      <Modal
-        visible={showForm}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleFormClose}
-      >
-        <TaskForm
-          task={editingTask}
-          onClose={handleFormClose}
-          onSuccess={handleFormSuccess}
-        />
-      </Modal>
-    </View>
-  );
-};
+        try {
+            setLoading(true);
+            await updateTask(userId, task.id, {
+                title: title.trim(),
+                mode,
+                label,
+            } as any);
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update task');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!userId) return;
+        Alert.alert('Delete Task', 'Are you sure?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                    await deleteTask(userId, task.id);
+                    onClose();
+                },
+            },
+        ]);
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
+                <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
+                    <View style={modalStyles.editHeader}>
+                        <Text style={modalStyles.title}>Edit Task</Text>
+                        <TouchableOpacity onPress={handleDelete}>
+                            <Text style={modalStyles.deleteBtn}>🗑</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <TextInput
+                        style={modalStyles.input}
+                        value={title}
+                        onChangeText={setTitle}
+                        autoFocus
+                    />
+
+                    <Text style={modalStyles.sectionLabel}>Label</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                        {DEFAULT_LABELS.map((l) => (
+                            <TouchableOpacity
+                                key={l.id}
+                                style={[
+                                    modalStyles.labelChip,
+                                    { borderColor: l.color },
+                                    label === l.id && { backgroundColor: l.color + '20' },
+                                ]}
+                                onPress={() => setLabel(l.id)}
+                            >
+                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                <Text style={modalStyles.labelText}>{l.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <Text style={modalStyles.sectionLabel}>Mode</Text>
+                    <View style={modalStyles.modeToggle}>
+                        <TouchableOpacity
+                            style={[modalStyles.modeButton, mode === 'home' && modalStyles.modeButtonActive]}
+                            onPress={() => setMode('home')}
+                        >
+                            <Text style={[modalStyles.modeText, mode === 'home' && modalStyles.modeTextActive]}>Home</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[modalStyles.modeButton, mode === 'work' && modalStyles.modeButtonActive]}
+                            onPress={() => setMode('work')}
+                        >
+                            <Text style={[modalStyles.modeText, mode === 'work' && modalStyles.modeTextActive]}>Work</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={modalStyles.actions}>
+                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[modalStyles.submitButton, loading && modalStyles.submitDisabled]}
+                            onPress={handleSave}
+                            disabled={loading}
+                        >
+                            <Text style={modalStyles.submitText}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    paddingTop: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    color: '#3b82f6',
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  addButtonContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  addButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#999',
-    textAlign: 'center',
-  },
-  taskCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  taskHeader: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  taskCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#3b82f6',
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  taskCheckboxChecked: {
-    color: '#3b82f6',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  taskInfo: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  taskTitleCompleted: {
-    textDecorationLine: 'line-through',
-    color: '#999',
-  },
-  taskBadges: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  priorityText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  repeatBadge: {
-    backgroundColor: '#e0e7ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  repeatText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  taskDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  taskDescriptionCompleted: {
-    color: '#999',
-  },
-  taskMeta: {
-    marginTop: 4,
-  },
-  taskMetaText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  tag: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  tagText: {
-    fontSize: 12,
-    color: '#1e40af',
-    fontWeight: '600',
-  },
-  taskActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  editButton: {
-    backgroundColor: '#f3f4f6',
-  },
-  editButtonText: {
-    color: '#374151',
-    fontWeight: '600',
-  },
-  deleteButton: {
-    backgroundColor: '#fee2e2',
-  },
-  deleteButtonText: {
-    color: '#dc2626',
-    fontWeight: '600',
-  },
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.md,
+    },
+    title: {
+        fontSize: fontSizes.h1,
+        fontWeight: '700' as const,
+        color: colors.textPrimary,
+    },
+    addButton: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.md,
+    },
+    addButtonText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    searchContainer: {
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
+    },
+    searchInput: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+    },
+    filterRow: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    filterChip: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surfaceSecondary,
+    },
+    filterChipActive: {
+        backgroundColor: colors.primary,
+    },
+    filterText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    filterTextActive: {
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    toolbar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+    },
+    toolbarText: {
+        fontSize: fontSizes.h3,
+        color: colors.textInverse,
+        fontWeight: '700' as const,
+    },
+    toolbarActions: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    toolbarIconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    toolbarIconBtnDanger: {
+        backgroundColor: colors.error,
+    },
+    toolbarIcon: {
+        fontSize: 16,
+        color: colors.textInverse,
+    },
+    listContent: {
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.xl,
+    },
+});
+
+const modalStyles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    backdrop: {
+        flex: 1,
+        backgroundColor: colors.overlay,
+    },
+    container: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: borderRadius.xl,
+        borderTopRightRadius: borderRadius.xl,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.xxl,
+        maxHeight: '75%',
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: spacing.md,
+    },
+    editHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    title: {
+        fontSize: fontSizes.h3,
+        fontWeight: '600' as const,
+        color: colors.textPrimary,
+        marginBottom: spacing.md,
+    },
+    deleteBtn: {
+        fontSize: 24,
+        marginBottom: spacing.md,
+    },
+    input: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    iconToolbar: {
+        flexDirection: 'row',
+        paddingVertical: spacing.md,
+        gap: spacing.lg,
+    },
+    toolbarItem: {
+        position: 'relative',
+    },
+    toolbarIconText: {
+        fontSize: 24,
+    },
+    labelDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    labelPicker: {
+        marginBottom: spacing.md,
+    },
+    labelChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginRight: spacing.sm,
+        gap: spacing.xs,
+    },
+    labelColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    labelText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textPrimary,
+    },
+    sectionLabel: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+        marginTop: spacing.md,
+        marginBottom: spacing.xs,
+    },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: spacing.md,
+    },
+    modeToggle: {
+        flexDirection: 'row',
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: 2,
+    },
+    modeButton: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.sm,
+    },
+    modeButtonActive: {
+        backgroundColor: colors.surface,
+    },
+    modeText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    modeTextActive: {
+        color: colors.textPrimary,
+        fontWeight: '500' as const,
+    },
+    submitButton: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.md,
+    },
+    submitDisabled: {
+        opacity: 0.5,
+    },
+    submitText: {
+        fontSize: fontSizes.body,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.lg,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: spacing.md,
+        alignItems: 'center',
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceSecondary,
+    },
+    cancelButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textSecondary,
+    },
 });

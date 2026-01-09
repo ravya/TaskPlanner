@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
-import LoadingSpinner from '../../common/LoadingSpinner';
 
 export interface LoginFormProps {
   onSuccess?: () => void;
@@ -34,43 +33,43 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   });
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login } = useAuth();
 
   const validateForm = (): boolean => {
     const newErrors: Partial<LoginFormData> = {};
-    
+
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
-    
+
     if (!formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
     setErrors({});
-    
+
     try {
       await login({
         email: formData.email,
         password: formData.password,
         rememberMe: formData.rememberMe,
       });
-      
+
       onSuccess?.();
     } catch (error: any) {
       const errorMessage = error?.message || 'Login failed. Please try again.';

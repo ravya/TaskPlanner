@@ -30,6 +30,8 @@ export interface Task {
   position: number; // for ordering
   boardId?: string;
   listId?: string;
+  mode: TaskMode; // personal or professional
+  projectId?: string; // project this task belongs to
 }
 
 // Task status enum
@@ -51,6 +53,12 @@ export enum TaskPriority {
   HIGH = 'high',
   HIGHEST = 'highest',
   URGENT = 'urgent',
+}
+
+// Task mode enum
+export enum TaskMode {
+  PERSONAL = 'personal',
+  PROFESSIONAL = 'professional',
 }
 
 // Subtask interface
@@ -121,11 +129,11 @@ export enum ReminderType {
 
 // Task label
 export interface TaskLabel {
-  id: string;
+  id?: string;
   name: string;
   color: string;
-  createdBy: string;
-  createdAt: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 // Task metadata
@@ -133,9 +141,9 @@ export interface TaskMetadata {
   source: 'web' | 'mobile' | 'api' | 'email' | 'integration';
   version: number;
   lastModifiedBy: string;
-  timeTracking: TaskTimeTracking;
-  automation: TaskAutomation;
-  customFields: Record<string, any>;
+  timeTracking?: TaskTimeTracking;
+  automation?: TaskAutomation;
+  customFields?: Record<string, any>;
 }
 
 // Task time tracking
@@ -196,6 +204,8 @@ export interface TaskFormData {
   subtasks?: Omit<Subtask, 'id' | 'createdAt' | 'updatedAt' | 'position'>[];
   labels?: string[];
   customFields?: Record<string, any>;
+  mode?: TaskMode;
+  projectId?: string;
 }
 
 // Task update data
@@ -213,6 +223,7 @@ export interface TaskUpdateData {
   progress?: number;
   labels?: string[];
   customFields?: Record<string, any>;
+  projectId?: string;
 }
 
 // Task filters
@@ -241,6 +252,8 @@ export interface TaskFilters {
   hasSubtasks?: boolean;
   isOverdue?: boolean;
   isDueSoon?: boolean; // due within next 7 days
+  mode?: TaskMode[];
+  projectId?: string;
 }
 
 // Task sort options
@@ -251,12 +264,12 @@ export interface TaskSortOptions {
 
 // Task sort fields
 export enum TaskSortField {
-  TITLE = 'title',
   CREATED_AT = 'createdAt',
   UPDATED_AT = 'updatedAt',
   DUE_DATE = 'dueDate',
   PRIORITY = 'priority',
   STATUS = 'status',
+  TITLE = 'title',
   PROGRESS = 'progress',
   POSITION = 'position',
 }
@@ -311,6 +324,8 @@ export interface TaskStatistics {
     today: number;
     thisWeek: number;
     thisMonth: number;
+    averageTasksPerWeek?: number;
+    streakDays?: number;
   };
 }
 
@@ -495,4 +510,42 @@ export interface TaskAnalytics {
     mostProductiveHour: number;
     mostProductiveDay: string;
   };
+}
+
+// Input types for service methods
+export interface CreateTaskInput extends Omit<TaskFormData, 'attachments' | 'labels'> {
+  attachments?: string[]; // URLs or IDs
+  labels?: TaskLabel[];
+  assignedBy?: string;
+  progress?: number;
+  reminders?: TaskReminder[];
+  metadata?: Partial<TaskMetadata>;
+  parentTaskId?: string;
+  position?: number;
+  boardId?: string;
+  listId?: string;
+  mode?: TaskMode;
+  projectId?: string;
+}
+
+export interface UpdateTaskInput extends Omit<TaskUpdateData, 'attachments' | 'labels'> {
+  attachments?: string[];
+  labels?: TaskLabel[];
+  assignedBy?: string;
+  reminders?: TaskReminder[];
+  metadata?: Partial<TaskMetadata>;
+  parentTaskId?: string;
+  position?: number;
+  boardId?: string;
+  listId?: string;
+  projectId?: string;
+}
+
+export interface BulkUpdateInput {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  assignedTo?: string;
+  isArchived?: boolean;
+  isDeleted?: boolean;
+  tags?: string[];
 }

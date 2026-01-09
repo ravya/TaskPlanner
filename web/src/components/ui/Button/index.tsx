@@ -3,13 +3,13 @@ import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 
 // Button variant types
-export type ButtonVariant = 
-  | 'primary' 
-  | 'secondary' 
-  | 'success' 
-  | 'warning' 
-  | 'danger' 
-  | 'ghost' 
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'ghost'
   | 'outline';
 
 // Button size types
@@ -54,7 +54,7 @@ const sizeClasses: Record<ButtonSize, string> = {
 const LoadingSpinner: React.FC<{ size: ButtonSize }> = ({ size }) => {
   const spinnerSize = {
     xs: 'w-3 h-3',
-    sm: 'w-4 h-4', 
+    sm: 'w-4 h-4',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
     xl: 'w-6 h-6',
@@ -65,16 +65,9 @@ const LoadingSpinner: React.FC<{ size: ButtonSize }> = ({ size }) => {
   );
 };
 
-// Animation variants for framer-motion
-const buttonVariants = {
-  initial: { scale: 1 },
-  tap: { scale: 0.95 },
-  hover: { scale: 1.02, transition: { duration: 0.2 } },
-  disabled: { opacity: 0.5, cursor: 'not-allowed' },
-};
-
 // Button component
-export const Button: React.FC<ButtonProps> = ({
+// Button component
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = 'primary',
   size = 'md',
   loading = false,
@@ -86,7 +79,7 @@ export const Button: React.FC<ButtonProps> = ({
   className,
   animate = true,
   ...props
-}) => {
+}, ref) => {
   const buttonClasses = clsx(
     baseClasses,
     variantClasses[variant],
@@ -108,11 +101,11 @@ export const Button: React.FC<ButtonProps> = ({
           </span>
         )
       )}
-      
+
       <span className={loading ? 'opacity-0' : 'opacity-100'}>
         {children}
       </span>
-      
+
       {!loading && rightIcon && (
         <span className="flex-shrink-0 ml-2 -mr-1">
           {rightIcon}
@@ -124,13 +117,13 @@ export const Button: React.FC<ButtonProps> = ({
   if (animate && !disabled && !loading) {
     return (
       <motion.button
+        ref={ref}
         className={buttonClasses}
         disabled={disabled || loading}
-        variants={buttonVariants}
-        initial="initial"
-        whileTap="tap"
-        whileHover="hover"
+        {...({} as any)}
         {...props}
+        whileHover={!disabled && !loading ? { scale: 1.02 } : undefined}
+        whileTap={!disabled && !loading ? { scale: 0.98 } : undefined}
       >
         {content}
       </motion.button>
@@ -139,6 +132,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
+      ref={ref}
       className={buttonClasses}
       disabled={disabled || loading}
       {...props}
@@ -146,7 +140,9 @@ export const Button: React.FC<ButtonProps> = ({
       {content}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';
 
 // Button group component for related actions
 export interface ButtonGroupProps {

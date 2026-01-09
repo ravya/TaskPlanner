@@ -8,6 +8,7 @@
     "runtime": "nodejs18"
   },
   "hosting": {
+    "site": "taskplanner-mvp",
     "public": "web/dist",
     "ignore": [
       "firebase.json",
@@ -31,6 +32,15 @@
         ]
       },
       {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "**/*.@(js|css)",
         "headers": [
           {
@@ -46,10 +56,10 @@
       "port": 9099
     },
     "firestore": {
-      "port": 8080
+      "port": 8081
     },
     "hosting": {
-      "port": 3000
+      "port": 3002
     },
     "ui": {
       "enabled": true,

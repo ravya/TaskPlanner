@@ -212,6 +212,103 @@ describe('Task Management', () => {
         .should('be.visible');
     });
 
+    it('should mark task as completed from Dashboard today\'s tasks section on mobile', () => {
+      // Visit dashboard
+      cy.visit('/');
+      
+      // Create a task for today
+      const todayTask = TaskTestDataGenerator.generateTask({
+        title: 'Today Task for Mobile Test',
+        status: 'todo',
+        startDate: new Date().toISOString().split('T')[0]
+      });
+      
+      cy.task('db:seedTasks', { userId: testUser.uid, tasks: [todayTask] });
+      cy.reload();
+      
+      // Find the checkbox in today's tasks section and click it
+      cy.get('input[type="checkbox"]')
+        .first()
+        .should('not.be.disabled')
+        .check();
+      
+      // Task should be marked as completed
+      cy.get('input[type="checkbox"]')
+        .first()
+        .should('be.checked');
+    });
+
+    it('should create next occurrence when repeating task is marked complete', () => {
+      const today = new Date().toISOString().split('T')[0];
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const repeatingTask = TaskTestDataGenerator.generateTask({
+        title: 'Daily Repeating Task',
+        status: 'todo',
+        startDate: today,
+        isRepeating: true,
+        repeatFrequency: 'daily',
+        repeatEndDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      });
+      
+      cy.task('db:seedTasks', { userId: testUser.uid, tasks: [repeatingTask] });
+      cy.reload();
+      
+      // Mark the task as completed
+      cy.get(`[data-cy="task-item"]:contains("${repeatingTask.title}")`)
+        .find('input[type="checkbox"]')
+        .check();
+      
+      // Wait for the next occurrence to be created
+      cy.wait(1000);
+      
+      // Reload to see the new task
+      cy.reload();
+      
+      // Should see the next occurrence for tomorrow
+      cy.get('[data-cy="task-item"]')
+        .contains('Daily Repeating Task')
+        .should('exist');
+    });
+
+    it('should only show today\'s tasks in today\'s task list', () => {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const tasks = [
+        TaskTestDataGenerator.generateTask({
+          title: 'Yesterday Task',
+          status: 'todo',
+          startDate: yesterday
+        }),
+        TaskTestDataGenerator.generateTask({
+          title: 'Today Task',
+          status: 'todo',
+          startDate: today
+        }),
+        TaskTestDataGenerator.generateTask({
+          title: 'Tomorrow Task',
+          status: 'todo',
+          startDate: tomorrow
+        })
+      ];
+      
+      cy.task('db:seedTasks', { userId: testUser.uid, tasks });
+      cy.reload();
+      
+      // Visit dashboard
+      cy.visit('/');
+      
+      // Today's tasks section should only show today's task
+      cy.get('h2').contains("Today's Tasks").parent()
+        .within(() => {
+          cy.contains('Today Task').should('exist');
+          cy.contains('Yesterday Task').should('not.exist');
+          cy.contains('Tomorrow Task').should('not.exist');
+        });
+    });
+
     it('should handle status update errors gracefully', () => {
       // Mock API failure
       cy.intercept('PUT', '**/tasks/*', { statusCode: 500 }).as('updateTaskError');

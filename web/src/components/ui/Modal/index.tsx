@@ -219,10 +219,10 @@ export const Modal: React.FC<ModalProps> = ({
               'fixed inset-0 bg-black/50 backdrop-blur-sm z-50',
               overlayClassName
             )}
-            variants={animate ? backdropVariants : undefined}
-            initial={animate ? 'hidden' : false}
-            animate={animate ? 'visible' : false}
-            exit={animate ? 'hidden' : false}
+            variants={backdropVariants}
+            initial="hidden"
+            animate={animate ? 'visible' : 'hidden'}
+            exit={animate ? 'hidden' : (false as any)}
             transition={{ duration: 0.2 }}
             onClick={handleOverlayClick}
           />
@@ -251,7 +251,7 @@ export const Modal: React.FC<ModalProps> = ({
               variants={animate ? modalVariants : undefined}
               initial={animate ? 'hidden' : false}
               animate={animate ? 'visible' : false}
-              exit={animate ? 'exit' : false}
+              exit={animate ? 'exit' : (false as any)}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}

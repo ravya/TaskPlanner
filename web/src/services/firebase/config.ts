@@ -14,6 +14,9 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
+// Check if we should use emulators
+const useEmulators = import.meta.env.VITE_USE_EMULATORS === 'true' || import.meta.env.DEV;
+
 // Initialize Firebase app (singleton pattern)
 function initializeFirebaseApp(): FirebaseApp {
   const apps = getApps();
@@ -32,6 +35,33 @@ export const auth: Auth = getAuth(app);
 // Initialize Firestore
 export const db: Firestore = getFirestore(app);
 
+// Connect to emulators in development - MUST be done before any operations
+if (useEmulators) {
+  try {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    console.log('🔧 Connected to Auth emulator at http://127.0.0.1:9099');
+  } catch (error: any) {
+    // Ignore "already connected" errors (common during hot reload)
+    if (error?.message?.includes('already been called') || error?.message?.includes('already connected')) {
+      console.log('🔧 Auth emulator already connected');
+    } else {
+      console.warn('⚠️ Could not connect to Auth emulator:', error);
+    }
+  }
+
+  try {
+    connectFirestoreEmulator(db, '127.0.0.1', 8081);
+    console.log('🔧 Connected to Firestore emulator at 127.0.0.1:8081');
+  } catch (error: any) {
+    // Ignore "already connected" errors (common during hot reload)
+    if (error?.message?.includes('already been called') || error?.message?.includes('already connected')) {
+      console.log('🔧 Firestore emulator already connected');
+    } else {
+      console.warn('⚠️ Could not connect to Firestore emulator:', error);
+    }
+  }
+}
+
 // Initialize Messaging (only if supported)
 let messaging: Messaging | null = null;
 
@@ -43,21 +73,6 @@ isSupported().then((supported) => {
 });
 
 export { messaging };
-
-// Connect to emulators in development
-if (import.meta.env.VITE_USE_EMULATORS === 'true' || import.meta.env.DEV) {
-  try {
-    // Connect Auth emulator
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    console.log('🔧 Connected to Auth emulator at http://127.0.0.1:9099');
-
-    // Connect Firestore emulator
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    console.log('🔧 Connected to Firestore emulator at 127.0.0.1:8080');
-  } catch (error) {
-    console.warn('⚠️ Could not connect to emulators:', error);
-  }
-}
 
 // Firebase configuration object for components
 export const firebaseSettings = {

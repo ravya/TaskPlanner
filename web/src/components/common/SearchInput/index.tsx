@@ -68,16 +68,15 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   autoFocus = false,
 }) => {
   const [localValue, setLocalValue] = useState(value);
-  const [isFocused, setIsFocused] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  
+
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   const debouncedValue = useDebounce(localValue, debounceDelay);
-  
+
   // Sync with external value
   useEffect(() => {
     setLocalValue(value);
@@ -121,14 +120,12 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   };
 
   const handleInputFocus = () => {
-    setIsFocused(true);
     if (suggestions.length > 0) {
       setShowSuggestions(true);
     }
   };
 
   const handleInputBlur = () => {
-    setIsFocused(false);
     // Delay hiding suggestions to allow for suggestion clicks
     setTimeout(() => {
       setShowSuggestions(false);
@@ -147,18 +144,18 @@ export const SearchInput: React.FC<SearchInputProps> = ({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedSuggestionIndex(prev => 
+        setSelectedSuggestionIndex(prev =>
           prev < suggestions.length - 1 ? prev + 1 : 0
         );
         break;
-        
+
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedSuggestionIndex(prev => 
+        setSelectedSuggestionIndex(prev =>
           prev > 0 ? prev - 1 : suggestions.length - 1
         );
         break;
-        
+
       case 'Enter':
         e.preventDefault();
         if (selectedSuggestionIndex >= 0) {
@@ -167,7 +164,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
           onSearch(localValue);
         }
         break;
-        
+
       case 'Escape':
         setShowSuggestions(false);
         setSelectedSuggestionIndex(-1);
@@ -250,7 +247,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
                 {clearIcon}
               </button>
             )}
-            
+
             {showSearchButton && (
               <button
                 type="button"
@@ -291,7 +288,7 @@ export const SearchInput: React.FC<SearchInputProps> = ({
                     {suggestion.icon}
                   </div>
                 )}
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-gray-900 truncate">

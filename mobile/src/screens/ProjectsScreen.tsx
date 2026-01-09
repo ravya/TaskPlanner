@@ -9,30 +9,54 @@ import {
     Alert,
     TextInput,
     Modal,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
-import { colors, spacing, typography, borderRadius, shadows } from '../styles/theme';
-import { createProject, deleteProject } from '../services/firebase';
-import { Project, ProjectMode, PROJECT_COLORS } from '../types';
+import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
+import { createProject, deleteProject, updateProject } from '../services/firebase';
+import { Project, ProjectMode, PROJECT_ICONS } from '../types';
 
 export function ProjectsScreen() {
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { projects, loading, refresh } = useProjects(user?.uid);
     const [modeFilter, setModeFilter] = useState<ProjectMode | 'all'>('all');
     const [showAddModal, setShowAddModal] = useState(false);
+    const [editingProject, setEditingProject] = useState<Project | null>(null);
     const [refreshing, setRefreshing] = useState(false);
 
     const filteredProjects = projects.filter((p) => {
         if (modeFilter !== 'all' && p.mode !== modeFilter) return false;
+        if (p.isArchived) return false; // Hide archived by default
         return true;
     });
+
+    const handleArchiveProject = useCallback(async (project: Project) => {
+        if (!user) return;
+        Alert.alert(
+            'Archive Project',
+            `Archive "${project.name}"? You can restore it later.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Archive',
+                    onPress: async () => {
+                        await updateProject(user.uid, project.id, { isArchived: true });
+                    },
+                },
+            ]
+        );
+    }, [user]);
 
     const handleDeleteProject = useCallback((project: Project) => {
         if (!user) return;
         Alert.alert(
             'Delete Project',
-            `Delete "${project.name}"? This will not delete the tasks.`,
+            `Delete "${project.name}"? This cannot be undone.`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -55,7 +79,7 @@ export function ProjectsScreen() {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.title}>Projects</Text>
@@ -64,16 +88,16 @@ export function ProjectsScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* Mode Filter */}
+            {/* Mode Filter - Home/Work */}
             <View style={styles.filterRow}>
-                {(['all', 'personal', 'professional'] as const).map((mode) => (
+                {(['all', 'home', 'work'] as const).map((mode) => (
                     <TouchableOpacity
                         key={mode}
                         style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
                         onPress={() => setModeFilter(mode)}
                     >
                         <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
-                            {mode === 'all' ? 'All' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                            {mode === 'all' ? 'All' : mode === 'home' ? 'Home' : 'Work'}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -84,12 +108,17 @@ export function ProjectsScreen() {
                 data={filteredProjects}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                    <ProjectCard project={item} onDelete={() => handleDeleteProject(item)} />
+                    <ProjectCard
+                        project={item}
+                        onPress={() => setEditingProject(item)}
+                        onArchive={() => handleArchiveProject(item)}
+                        onDelete={() => handleDeleteProject(item)}
+                    />
                 )}
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
-                    <EmptyState icon="📁" title="No projects" subtitle="Create a project to organize tasks" />
+                    <EmptyState icon="📂" title="No projects" subtitle="Tap + New to create a project" />
                 }
             />
 
@@ -98,36 +127,59 @@ export function ProjectsScreen() {
                 onClose={() => setShowAddModal(false)}
                 userId={user?.uid}
             />
+
+            {editingProject && (
+                <EditProjectModal
+                    visible={!!editingProject}
+                    project={editingProject}
+                    onClose={() => setEditingProject(null)}
+                    userId={user?.uid}
+                />
+            )}
         </View>
     );
 }
 
-function ProjectCard({ project, onDelete }: { project: Project; onDelete: () => void }) {
+function ProjectCard({
+    project,
+    onPress,
+    onArchive,
+    onDelete,
+}: {
+    project: Project;
+    onPress: () => void;
+    onArchive: () => void;
+    onDelete: () => void;
+}) {
     const progress = project.taskCount > 0
         ? Math.round((project.completedTaskCount / project.taskCount) * 100)
         : 0;
 
     return (
-        <View style={cardStyles.container}>
-            <View style={[cardStyles.colorBar, { backgroundColor: project.color || colors.primary }]} />
+        <TouchableOpacity style={cardStyles.container} onPress={onPress}>
             <View style={cardStyles.content}>
                 <View style={cardStyles.header}>
                     <Text style={cardStyles.icon}>{project.icon || '📁'}</Text>
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
-                    <TouchableOpacity onPress={onDelete}>
-                        <Text style={cardStyles.deleteIcon}>×</Text>
-                    </TouchableOpacity>
+                    <View style={[cardStyles.modeBadge, {
+                        backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
+                    }]}>
+                        <Text style={cardStyles.modeText}>
+                            {project.mode === 'home' ? 'H' : 'W'}
+                        </Text>
+                    </View>
                 </View>
                 <View style={cardStyles.meta}>
                     <Text style={cardStyles.metaText}>
                         {project.completedTaskCount}/{project.taskCount} tasks
                     </Text>
-                    <View style={[cardStyles.modeBadge, {
-                        backgroundColor: project.mode === 'personal' ? colors.modePersonal : colors.modeProfessional
-                    }]}>
-                        <Text style={cardStyles.modeText}>
-                            {project.mode === 'personal' ? 'P' : 'W'}
-                        </Text>
+                    <View style={cardStyles.actions}>
+                        <TouchableOpacity onPress={onArchive} style={cardStyles.actionBtn}>
+                            <Text style={cardStyles.actionIcon}>📥</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onDelete} style={cardStyles.actionBtn}>
+                            <Text style={cardStyles.actionIcon}>🗑</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
                 {/* Progress bar */}
@@ -135,7 +187,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: () => 
                     <View style={[cardStyles.progressBar, { width: `${progress}%` }]} />
                 </View>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 }
 
@@ -149,8 +201,8 @@ function AddProjectModal({
     userId?: string;
 }) {
     const [name, setName] = useState('');
-    const [mode, setMode] = useState<ProjectMode>('personal');
-    const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0]);
+    const [mode, setMode] = useState<ProjectMode>('home');
+    const [selectedIcon, setSelectedIcon] = useState(PROJECT_ICONS[0]);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -158,7 +210,7 @@ function AddProjectModal({
 
         try {
             setLoading(true);
-            await createProject(userId, { name: name.trim(), mode, color: selectedColor });
+            await createProject(userId, { name: name.trim(), mode, icon: selectedIcon });
             setName('');
             onClose();
         } catch (error) {
@@ -168,10 +220,20 @@ function AddProjectModal({
         }
     };
 
+    const handleClose = () => {
+        setName('');
+        onClose();
+    };
+
     return (
         <Modal visible={visible} animationType="slide" transparent>
-            <View style={modalStyles.overlay}>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
                 <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
                     <Text style={modalStyles.title}>New Project</Text>
 
                     <TextInput
@@ -183,38 +245,39 @@ function AddProjectModal({
                         autoFocus
                     />
 
+                    <Text style={modalStyles.label}>Icon</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
+                        {PROJECT_ICONS.map((icon) => (
+                            <TouchableOpacity
+                                key={icon}
+                                style={[
+                                    modalStyles.iconChip,
+                                    selectedIcon === icon && modalStyles.iconChipActive,
+                                ]}
+                                onPress={() => setSelectedIcon(icon)}
+                            >
+                                <Text style={modalStyles.iconText}>{icon}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
                     <Text style={modalStyles.label}>Mode</Text>
-                    <View style={modalStyles.optionRow}>
-                        {(['personal', 'professional'] as const).map((m) => (
+                    <View style={modalStyles.modeRow}>
+                        {(['home', 'work'] as const).map((m) => (
                             <TouchableOpacity
                                 key={m}
-                                style={[modalStyles.optionChip, mode === m && modalStyles.optionChipActive]}
+                                style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
                                 onPress={() => setMode(m)}
                             >
-                                <Text style={[modalStyles.optionText, mode === m && modalStyles.optionTextActive]}>
-                                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                                <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                    {m === 'home' ? 'Home' : 'Work'}
                                 </Text>
                             </TouchableOpacity>
                         ))}
                     </View>
 
-                    <Text style={modalStyles.label}>Color</Text>
-                    <View style={modalStyles.colorRow}>
-                        {PROJECT_COLORS.map((color) => (
-                            <TouchableOpacity
-                                key={color}
-                                style={[
-                                    modalStyles.colorDot,
-                                    { backgroundColor: color },
-                                    selectedColor === color && modalStyles.colorDotActive,
-                                ]}
-                                onPress={() => setSelectedColor(color)}
-                            />
-                        ))}
-                    </View>
-
                     <View style={modalStyles.actions}>
-                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                        <TouchableOpacity style={modalStyles.cancelButton} onPress={handleClose}>
                             <Text style={modalStyles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -226,29 +289,141 @@ function AddProjectModal({
                         </TouchableOpacity>
                     </View>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
+function EditProjectModal({
+    visible,
+    project,
+    onClose,
+    userId,
+}: {
+    visible: boolean;
+    project: Project;
+    onClose: () => void;
+    userId?: string;
+}) {
+    const [name, setName] = useState(project.name);
+    const [mode, setMode] = useState<ProjectMode>(project.mode);
+    const [selectedIcon, setSelectedIcon] = useState(project.icon || PROJECT_ICONS[0]);
+    const [loading, setLoading] = useState(false);
+
+    const handleSave = async () => {
+        if (!userId || !name.trim()) return;
+
+        try {
+            setLoading(true);
+            await updateProject(userId, project.id, {
+                name: name.trim(),
+                mode,
+                icon: selectedIcon,
+            });
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update project');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
+                <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
+                    <Text style={modalStyles.title}>Edit Project</Text>
+
+                    <TextInput
+                        style={modalStyles.input}
+                        value={name}
+                        onChangeText={setName}
+                        autoFocus
+                    />
+
+                    <Text style={modalStyles.label}>Icon</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
+                        {PROJECT_ICONS.map((icon) => (
+                            <TouchableOpacity
+                                key={icon}
+                                style={[
+                                    modalStyles.iconChip,
+                                    selectedIcon === icon && modalStyles.iconChipActive,
+                                ]}
+                                onPress={() => setSelectedIcon(icon)}
+                            >
+                                <Text style={modalStyles.iconText}>{icon}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <Text style={modalStyles.label}>Mode</Text>
+                    <View style={modalStyles.modeRow}>
+                        {(['home', 'work'] as const).map((m) => (
+                            <TouchableOpacity
+                                key={m}
+                                style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
+                                onPress={() => setMode(m)}
+                            >
+                                <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                    {m === 'home' ? 'Home' : 'Work'}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <View style={modalStyles.actions}>
+                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[modalStyles.submitButton, loading && modalStyles.buttonDisabled]}
+                            onPress={handleSave}
+                            disabled={loading}
+                        >
+                            <Text style={modalStyles.submitButtonText}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
+        paddingTop: spacing.md,
         paddingBottom: spacing.md,
     },
-    title: { ...typography.h1, color: colors.textPrimary },
+    title: {
+        fontSize: fontSizes.h1,
+        fontWeight: '700' as const,
+        color: colors.textPrimary,
+    },
     addButton: {
         backgroundColor: colors.primary,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: borderRadius.md,
     },
-    addButtonText: { ...typography.bodySmall, color: colors.textInverse, fontWeight: '600' },
+    addButtonText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
     filterRow: {
         flexDirection: 'row',
         paddingHorizontal: spacing.lg,
@@ -261,82 +436,183 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.full,
         backgroundColor: colors.surfaceSecondary,
     },
-    filterChipActive: { backgroundColor: colors.primary },
-    filterText: { ...typography.bodySmall, color: colors.textSecondary },
-    filterTextActive: { color: colors.textInverse, fontWeight: '600' },
-    listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+    filterChipActive: {
+        backgroundColor: colors.primary,
+    },
+    filterText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    filterTextActive: {
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    listContent: {
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.xl,
+    },
 });
 
 const cardStyles = StyleSheet.create({
     container: {
-        flexDirection: 'row',
         backgroundColor: colors.surface,
-        borderRadius: borderRadius.md,
-        marginBottom: spacing.sm,
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.md,
         overflow: 'hidden',
-        ...shadows.sm,
     },
-    colorBar: { width: 4 },
-    content: { flex: 1, padding: spacing.md },
-    header: { flexDirection: 'row', alignItems: 'center' },
-    icon: { fontSize: 20, marginRight: spacing.sm },
-    name: { ...typography.body, color: colors.textPrimary, flex: 1, fontWeight: '500' },
-    deleteIcon: { fontSize: 24, color: colors.textTertiary, paddingHorizontal: spacing.xs },
-    meta: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
-    metaText: { ...typography.caption, color: colors.textSecondary },
-    modeBadge: {
-        marginLeft: spacing.sm,
-        width: 18,
-        height: 18,
-        borderRadius: 9,
+    content: {
+        padding: spacing.md,
+    },
+    header: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
+        marginBottom: spacing.xs,
     },
-    modeText: { ...typography.caption, color: colors.textInverse, fontWeight: '600', fontSize: 10 },
+    icon: {
+        fontSize: 20,
+        marginRight: spacing.sm,
+    },
+    name: {
+        flex: 1,
+        fontSize: fontSizes.body,
+        fontWeight: '500' as const,
+        color: colors.textPrimary,
+    },
+    modeBadge: {
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 2,
+        borderRadius: borderRadius.sm,
+    },
+    modeText: {
+        fontSize: 10,
+        fontWeight: '600' as const,
+        color: colors.textInverse,
+    },
+    meta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.sm,
+    },
+    metaText: {
+        fontSize: fontSizes.caption,
+        color: colors.textSecondary,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    actionBtn: {
+        padding: spacing.xs,
+    },
+    actionIcon: {
+        fontSize: 16,
+    },
     progressContainer: {
-        height: 3,
-        backgroundColor: colors.border,
+        height: 4,
+        backgroundColor: colors.surfaceSecondary,
         borderRadius: 2,
-        marginTop: spacing.sm,
         overflow: 'hidden',
     },
-    progressBar: { height: '100%', backgroundColor: colors.success, borderRadius: 2 },
+    progressBar: {
+        height: '100%',
+        backgroundColor: colors.success,
+        borderRadius: 2,
+    },
 });
 
 const modalStyles = StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+    overlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    backdrop: {
+        flex: 1,
+        backgroundColor: colors.overlay,
+    },
     container: {
         backgroundColor: colors.surface,
         borderTopLeftRadius: borderRadius.xl,
         borderTopRightRadius: borderRadius.xl,
-        padding: spacing.lg,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.xxl,
+        maxHeight: '70%',
     },
-    title: { ...typography.h2, color: colors.textPrimary, marginBottom: spacing.lg },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: spacing.md,
+    },
+    title: {
+        fontSize: fontSizes.h3,
+        fontWeight: '600' as const,
+        color: colors.textPrimary,
+        marginBottom: spacing.lg,
+    },
     input: {
         backgroundColor: colors.surfaceSecondary,
         borderRadius: borderRadius.md,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
-        ...typography.body,
+        fontSize: fontSizes.body,
         color: colors.textPrimary,
         marginBottom: spacing.md,
     },
-    label: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.xs },
-    optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-    optionChip: {
+    label: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+        marginBottom: spacing.xs,
+    },
+    iconRow: {
+        marginBottom: spacing.md,
+    },
+    iconChip: {
+        width: 44,
+        height: 44,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceSecondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.sm,
+    },
+    iconChipActive: {
+        backgroundColor: colors.primaryLight,
+        borderWidth: 2,
+        borderColor: colors.primary,
+    },
+    iconText: {
+        fontSize: 24,
+    },
+    modeRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginBottom: spacing.lg,
+    },
+    modeChip: {
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: borderRadius.md,
         backgroundColor: colors.surfaceSecondary,
     },
-    optionChipActive: { backgroundColor: colors.primary },
-    optionText: { ...typography.bodySmall, color: colors.textSecondary },
-    optionTextActive: { color: colors.textInverse, fontWeight: '600' },
-    colorRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
-    colorDot: { width: 32, height: 32, borderRadius: 16 },
-    colorDotActive: { borderWidth: 3, borderColor: colors.textPrimary },
-    actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+    modeChipActive: {
+        backgroundColor: colors.primary,
+    },
+    modeText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    modeTextActive: {
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
     cancelButton: {
         flex: 1,
         paddingVertical: spacing.md,
@@ -344,7 +620,10 @@ const modalStyles = StyleSheet.create({
         borderRadius: borderRadius.md,
         backgroundColor: colors.surfaceSecondary,
     },
-    cancelButtonText: { ...typography.body, color: colors.textSecondary },
+    cancelButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textSecondary,
+    },
     submitButton: {
         flex: 1,
         paddingVertical: spacing.md,
@@ -352,6 +631,12 @@ const modalStyles = StyleSheet.create({
         borderRadius: borderRadius.md,
         backgroundColor: colors.primary,
     },
-    submitButtonText: { ...typography.body, color: colors.textInverse, fontWeight: '600' },
-    buttonDisabled: { opacity: 0.5 },
+    submitButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    buttonDisabled: {
+        opacity: 0.5,
+    },
 });

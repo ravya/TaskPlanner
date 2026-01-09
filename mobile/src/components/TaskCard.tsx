@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Task } from '../types';
-import { colors, spacing, borderRadius, typography, shadows } from '../styles/theme';
+import { Task, DEFAULT_LABELS, TaskLabel } from '../types';
+import { colors, spacing, borderRadius, fontSizes } from '../styles/theme';
 
 interface TaskCardProps {
     task: Task;
@@ -18,11 +18,9 @@ export function TaskCard({
     onLongPress,
     onToggleComplete,
 }: TaskCardProps) {
-    const priorityColor = {
-        low: colors.priorityLow,
-        medium: colors.priorityMedium,
-        high: colors.priorityHigh,
-    }[task.priority];
+    // Get label info (with fallback for legacy priority)
+    const taskLabel = (task as any).label || 'none';
+    const labelInfo = DEFAULT_LABELS.find((l) => l.id === taskLabel) || DEFAULT_LABELS[5]; // Default to 'none'
 
     const subtaskCount = task.subtasks?.length || 0;
     const completedSubtasks = task.subtasks?.filter((s) => s.completed).length || 0;
@@ -49,7 +47,6 @@ export function TaskCard({
             {/* Content */}
             <View style={styles.content}>
                 <View style={styles.titleRow}>
-                    <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
                     <Text
                         style={[styles.title, task.completed && styles.titleCompleted]}
                         numberOfLines={1}
@@ -60,6 +57,16 @@ export function TaskCard({
 
                 {/* Meta info */}
                 <View style={styles.meta}>
+                    {/* Label badge */}
+                    {taskLabel !== 'none' && (
+                        <View style={[styles.labelBadge, { backgroundColor: labelInfo.color + '20' }]}>
+                            <View style={[styles.labelDot, { backgroundColor: labelInfo.color }]} />
+                            <Text style={[styles.labelText, { color: labelInfo.color }]}>
+                                {labelInfo.name}
+                            </Text>
+                        </View>
+                    )}
+
                     {task.startTime && (
                         <Text style={styles.metaText}>{task.startTime}</Text>
                     )}
@@ -82,7 +89,7 @@ export function TaskCard({
             <View
                 style={[
                     styles.modeIndicator,
-                    { backgroundColor: task.mode === 'personal' ? colors.modePersonal : colors.modeProfessional },
+                    { backgroundColor: task.mode === 'home' ? colors.modePersonal : colors.modeProfessional },
                 ]}
             />
         </TouchableOpacity>
@@ -97,7 +104,6 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.md,
         padding: spacing.md,
         marginBottom: spacing.sm,
-        ...shadows.sm,
     },
     selected: {
         backgroundColor: colors.primaryLight + '30',
@@ -124,7 +130,7 @@ const styles = StyleSheet.create({
     checkmark: {
         color: colors.textInverse,
         fontSize: 14,
-        fontWeight: '700',
+        fontWeight: '700' as const,
     },
     content: {
         flex: 1,
@@ -133,14 +139,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-    priorityDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        marginRight: spacing.sm,
-    },
     title: {
-        ...typography.body,
+        fontSize: fontSizes.body,
         color: colors.textPrimary,
         flex: 1,
     },
@@ -153,9 +153,27 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: spacing.xs,
         gap: spacing.sm,
+        flexWrap: 'wrap',
+    },
+    labelBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 2,
+        borderRadius: borderRadius.full,
+        gap: 4,
+    },
+    labelDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    labelText: {
+        fontSize: fontSizes.caption,
+        fontWeight: '500' as const,
     },
     metaText: {
-        ...typography.caption,
+        fontSize: fontSizes.caption,
         color: colors.textTertiary,
     },
     subtaskBadge: {
@@ -165,11 +183,11 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.sm,
     },
     subtaskText: {
-        ...typography.caption,
+        fontSize: fontSizes.caption,
         color: colors.textSecondary,
     },
     projectTag: {
-        ...typography.caption,
+        fontSize: fontSizes.caption,
         color: colors.primary,
         maxWidth: 80,
     },

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Task, TaskMode } from '../types';
-import { getTasks, getTodayTasks, subscribeToTasks } from '../services/firebase';
+import { getTasks, subscribeToTasks, subscribeToTodayTasks } from '../services/firebase';
 
 interface UseTasksOptions {
     mode?: TaskMode;
@@ -45,7 +45,11 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
                     filtered = filtered.filter((t) => t.mode === options.mode);
                 }
                 if (options?.date) {
-                    filtered = filtered.filter((t) => t.startDate === options.date);
+                    // Support both dueDate (new) and startDate (legacy)
+                    filtered = filtered.filter((t) => {
+                        const taskDate = (t as any).dueDate || (t as any).startDate;
+                        return taskDate === options.date;
+                    });
                 }
                 if (options?.projectId) {
                     filtered = filtered.filter((t) => t.projectId === options.projectId);
@@ -66,6 +70,29 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
 }
 
 export function useTodayTasks(userId: string | undefined) {
-    const today = new Date().toISOString().split('T')[0];
-    return useTasks(userId, { date: today, includeCompleted: true, realtime: true });
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const refresh = useCallback(async () => {
+        // Force refresh by re-subscribing
+    }, []);
+
+    useEffect(() => {
+        if (!userId) {
+            setTasks([]);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        const unsubscribe = subscribeToTodayTasks(userId, (todayTasks) => {
+            setTasks(todayTasks);
+            setLoading(false);
+        });
+
+        return unsubscribe;
+    }, [userId]);
+
+    return { tasks, loading, error, refresh, setTasks };
 }

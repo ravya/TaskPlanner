@@ -4,22 +4,31 @@ import {
     getDocs,
     addDoc,
     updateDoc,
-    deleteDoc,
     query,
     where,
-    orderBy,
     onSnapshot,
-    Timestamp,
     writeBatch,
 } from 'firebase/firestore';
 import { db } from './config';
-import { Task, TaskFormData, TaskMode } from '../../types';
+import { Task, TaskFormData, TaskMode, TaskLabel } from '../../types';
 
 const TASKS_COLLECTION = 'tasks';
 
 // Get user's tasks collection reference
 function getUserTasksRef(userId: string) {
     return collection(db, 'users', userId, TASKS_COLLECTION);
+}
+
+// Format date to YYYY-MM-DD
+function formatDate(date: Date | string): string {
+    if (typeof date === 'string') {
+        // If already a string, ensure it's in YYYY-MM-DD format
+        if (date.includes('T')) {
+            return date.split('T')[0];
+        }
+        return date;
+    }
+    return date.toISOString().split('T')[0];
 }
 
 // Get tasks for a user
@@ -33,7 +42,7 @@ export async function getTasks(
     }
 ): Promise<Task[]> {
     const tasksRef = getUserTasksRef(userId);
-    let q = query(tasksRef, where('isDeleted', '!=', true));
+    const q = query(tasksRef, where('isDeleted', '!=', true));
 
     const snapshot = await getDocs(q);
     let tasks = snapshot.docs.map((doc) => ({
@@ -46,7 +55,11 @@ export async function getTasks(
         tasks = tasks.filter((t) => t.mode === options.mode);
     }
     if (options?.date) {
-        tasks = tasks.filter((t) => t.startDate === options.date);
+        // Match by dueDate field (new) or startDate (legacy)
+        tasks = tasks.filter((t) => {
+            const taskDate = (t as any).dueDate || (t as any).startDate;
+            return taskDate === options.date;
+        });
     }
     if (options?.projectId) {
         tasks = tasks.filter((t) => t.projectId === options.projectId);
@@ -61,7 +74,7 @@ export async function getTasks(
 
 // Get tasks for today
 export async function getTodayTasks(userId: string): Promise<Task[]> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatDate(new Date());
     return getTasks(userId, { date: today, includeCompleted: true });
 }
 
@@ -69,9 +82,24 @@ export async function getTodayTasks(userId: string): Promise<Task[]> {
 export async function createTask(userId: string, data: TaskFormData): Promise<Task> {
     const tasksRef = getUserTasksRef(userId);
     const now = new Date().toISOString();
+    const today = formatDate(new Date());
+
+    // Ensure dueDate is properly formatted
+    const dueDate = data.dueDate ? formatDate(data.dueDate) : today;
 
     const taskData = {
-        ...data,
+        title: data.title,
+        description: data.description || '',
+        label: data.label || 'none',
+        mode: data.mode || 'home',
+        tags: data.tags || [],
+        dueDate: dueDate,
+        startTime: data.startTime || null,
+        isRepeating: data.isRepeating || false,
+        repeatFrequency: data.repeatFrequency || null,
+        repeatEndDate: data.repeatEndDate || null,
+        subtasks: data.subtasks || [],
+        projectId: data.projectId || null,
         userId,
         status: 'todo' as const,
         completed: false,
@@ -161,5 +189,21 @@ export function subscribeToTasks(
             ...doc.data(),
         })) as Task[];
         callback(tasks.sort((a, b) => (a.position || 0) - (b.position || 0)));
+    });
+}
+
+// Subscribe to today's tasks specifically
+export function subscribeToTodayTasks(
+    userId: string,
+    callback: (tasks: Task[]) => void
+): () => void {
+    const today = formatDate(new Date());
+
+    return subscribeToTasks(userId, (allTasks) => {
+        const todayTasks = allTasks.filter((t) => {
+            const taskDate = (t as any).dueDate || (t as any).startDate;
+            return taskDate === today;
+        });
+        callback(todayTasks);
     });
 }

@@ -7,20 +7,30 @@ import {
     StyleSheet,
     RefreshControl,
     Alert,
+    Modal,
+    TextInput,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from 'react-native';
-import { useTodayTasks, useAuth } from '../hooks';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTodayTasks, useAuth, useProjects } from '../hooks';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState, LoadingState } from '../components/EmptyState';
-import { colors, spacing, typography, borderRadius } from '../styles/theme';
-import { toggleTaskComplete, bulkToggleComplete, updateTaskPositions } from '../services/firebase';
-import { Task, TaskMode } from '../types';
+import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
+import { toggleTaskComplete, bulkToggleComplete, createTask, updateTask } from '../services/firebase';
+import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
 export function DashboardScreen() {
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
-    const { tasks, loading, refresh, setTasks } = useTodayTasks(user?.uid);
+    const { tasks, loading, refresh } = useTodayTasks(user?.uid);
+    const { projects } = useProjects(user?.uid);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
     const [refreshing, setRefreshing] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [editingTask, setEditingTask] = useState<Task | null>(null);
 
     const filteredTasks = tasks.filter((task) => {
         if (modeFilter !== 'all' && task.mode !== modeFilter) return false;
@@ -32,7 +42,6 @@ export function DashboardScreen() {
 
     const isMultiSelectMode = selectedIds.size > 0;
 
-    // Toggle task selection for multi-select
     const handleLongPress = useCallback((taskId: string) => {
         setSelectedIds((prev) => {
             const next = new Set(prev);
@@ -45,14 +54,15 @@ export function DashboardScreen() {
         });
     }, []);
 
-    // Handle task press
-    const handleTaskPress = useCallback((taskId: string) => {
+    const handleTaskPress = useCallback((task: Task) => {
         if (isMultiSelectMode) {
-            handleLongPress(taskId);
+            handleLongPress(task.id);
+        } else {
+            // Open edit modal
+            setEditingTask(task);
         }
     }, [isMultiSelectMode, handleLongPress]);
 
-    // Toggle single task complete
     const handleToggleComplete = useCallback(async (task: Task) => {
         if (!user) return;
         try {
@@ -62,7 +72,6 @@ export function DashboardScreen() {
         }
     }, [user]);
 
-    // Bulk complete selected tasks
     const handleBulkComplete = useCallback(async () => {
         if (!user || selectedIds.size === 0) return;
         try {
@@ -73,12 +82,10 @@ export function DashboardScreen() {
         }
     }, [user, selectedIds]);
 
-    // Clear selection
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
     }, []);
 
-    // Pull to refresh
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
         await refresh();
@@ -97,50 +104,55 @@ export function DashboardScreen() {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
                 <View>
                     <Text style={styles.greeting}>Today</Text>
                     <Text style={styles.date}>{dateString}</Text>
                 </View>
-                <View style={styles.statsRow}>
-                    <Text style={styles.statText}>
-                        {incompleteTasks.length} pending
-                    </Text>
+                <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
+                    <Text style={styles.addButtonText}>+ Add</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Stats Row */}
+            <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{incompleteTasks.length}</Text>
+                    <Text style={styles.statLabel}>pending</Text>
+                </View>
+                <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{completedTasks.length}</Text>
+                    <Text style={styles.statLabel}>done</Text>
                 </View>
             </View>
 
-            {/* Mode Filter */}
+            {/* Mode Filter - Home/Work */}
             <View style={styles.filterRow}>
-                {(['all', 'personal', 'professional'] as const).map((mode) => (
+                {(['all', 'home', 'work'] as const).map((mode) => (
                     <TouchableOpacity
                         key={mode}
                         style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
                         onPress={() => setModeFilter(mode)}
                     >
-                        <Text
-                            style={[
-                                styles.filterText,
-                                modeFilter === mode && styles.filterTextActive,
-                            ]}
-                        >
-                            {mode === 'all' ? 'All' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                        <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
+                            {mode === 'all' ? 'All' : mode === 'home' ? 'Home' : 'Work'}
                         </Text>
                     </TouchableOpacity>
                 ))}
             </View>
 
-            {/* Multi-select toolbar */}
+            {/* Multi-select toolbar - Icons only */}
             {isMultiSelectMode && (
                 <View style={styles.toolbar}>
-                    <Text style={styles.toolbarText}>{selectedIds.size} selected</Text>
+                    <Text style={styles.toolbarText}>{selectedIds.size}</Text>
                     <View style={styles.toolbarActions}>
-                        <TouchableOpacity style={styles.toolbarButton} onPress={handleBulkComplete}>
-                            <Text style={styles.toolbarButtonText}>✓ Complete</Text>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkComplete}>
+                            <Text style={styles.toolbarIcon}>✓</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.toolbarButtonSecondary} onPress={clearSelection}>
-                            <Text style={styles.toolbarButtonTextSecondary}>Cancel</Text>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={clearSelection}>
+                            <Text style={styles.toolbarIcon}>✕</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -154,24 +166,297 @@ export function DashboardScreen() {
                     <TaskCard
                         task={item}
                         selected={selectedIds.has(item.id)}
-                        onPress={() => handleTaskPress(item.id)}
+                        onPress={() => handleTaskPress(item)}
                         onLongPress={() => handleLongPress(item.id)}
                         onToggleComplete={() => handleToggleComplete(item)}
                     />
                 )}
                 contentContainerStyle={styles.listContent}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <EmptyState
-                        icon="🎯"
+                        icon="☆"
                         title="No tasks for today"
-                        subtitle="Add a task to get started"
+                        subtitle="Tap + Add to create a task"
                     />
                 }
             />
+
+            {/* Add Task Modal */}
+            <AddTaskModal
+                visible={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                userId={user?.uid}
+            />
+
+            {/* Edit Task Modal */}
+            {editingTask && (
+                <EditTaskModal
+                    visible={!!editingTask}
+                    task={editingTask}
+                    onClose={() => setEditingTask(null)}
+                    userId={user?.uid}
+                />
+            )}
         </View>
+    );
+}
+
+// Enhanced Add Task Modal with icons
+function AddTaskModal({
+    visible,
+    onClose,
+    userId,
+}: {
+    visible: boolean;
+    onClose: () => void;
+    userId?: string;
+}) {
+    const [title, setTitle] = useState('');
+    const [mode, setMode] = useState<TaskMode>('home');
+    const [label, setLabel] = useState<TaskLabel>('none');
+    const [showLabelPicker, setShowLabelPicker] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!userId || !title.trim()) return;
+
+        try {
+            setLoading(true);
+            await createTask(userId, {
+                title: title.trim(),
+                mode,
+                label,
+                dueDate: new Date(),
+            });
+            setTitle('');
+            setLabel('none');
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to create task');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleClose = () => {
+        setTitle('');
+        setLabel('none');
+        onClose();
+    };
+
+    const selectedLabel = DEFAULT_LABELS.find((l) => l.id === label);
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
+                <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
+
+                    <TextInput
+                        style={modalStyles.input}
+                        placeholder="What needs to be done?"
+                        placeholderTextColor={colors.textTertiary}
+                        value={title}
+                        onChangeText={setTitle}
+                        autoFocus
+                        returnKeyType="done"
+                        onSubmitEditing={handleSubmit}
+                    />
+
+                    {/* Icon toolbar */}
+                    <View style={modalStyles.iconToolbar}>
+                        <TouchableOpacity
+                            style={modalStyles.toolbarItem}
+                            onPress={() => setShowLabelPicker(!showLabelPicker)}
+                        >
+                            <Text style={modalStyles.toolbarIcon}>🏷️</Text>
+                            {label !== 'none' && (
+                                <View style={[modalStyles.labelDot, { backgroundColor: selectedLabel?.color }]} />
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIcon}>📅</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIcon}>🔄</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Text style={modalStyles.toolbarIcon}>☑️</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Label picker */}
+                    {showLabelPicker && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                            {DEFAULT_LABELS.map((l) => (
+                                <TouchableOpacity
+                                    key={l.id}
+                                    style={[
+                                        modalStyles.labelChip,
+                                        { borderColor: l.color },
+                                        label === l.id && { backgroundColor: l.color + '20' },
+                                    ]}
+                                    onPress={() => {
+                                        setLabel(l.id);
+                                        setShowLabelPicker(false);
+                                    }}
+                                >
+                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                    <Text style={modalStyles.labelText}>{l.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )}
+
+                    <View style={modalStyles.row}>
+                        <View style={modalStyles.modeToggle}>
+                            <TouchableOpacity
+                                style={[
+                                    modalStyles.modeButton,
+                                    mode === 'home' && modalStyles.modeButtonActive,
+                                ]}
+                                onPress={() => setMode('home')}
+                            >
+                                <Text style={[
+                                    modalStyles.modeText,
+                                    mode === 'home' && modalStyles.modeTextActive,
+                                ]}>Home</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    modalStyles.modeButton,
+                                    mode === 'work' && modalStyles.modeButtonActive,
+                                ]}
+                                onPress={() => setMode('work')}
+                            >
+                                <Text style={[
+                                    modalStyles.modeText,
+                                    mode === 'work' && modalStyles.modeTextActive,
+                                ]}>Work</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[modalStyles.submitButton, (!title.trim() || loading) && modalStyles.submitDisabled]}
+                            onPress={handleSubmit}
+                            disabled={!title.trim() || loading}
+                        >
+                            <Text style={modalStyles.submitText}>Add</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
+// Edit Task Modal
+function EditTaskModal({
+    visible,
+    task,
+    onClose,
+    userId,
+}: {
+    visible: boolean;
+    task: Task;
+    onClose: () => void;
+    userId?: string;
+}) {
+    const [title, setTitle] = useState(task.title);
+    const [mode, setMode] = useState<TaskMode>(task.mode);
+    const [label, setLabel] = useState<TaskLabel>((task as any).label || 'none');
+    const [loading, setLoading] = useState(false);
+
+    const handleSave = async () => {
+        if (!userId || !title.trim()) return;
+
+        try {
+            setLoading(true);
+            await updateTask(userId, task.id, {
+                title: title.trim(),
+                mode,
+                label,
+            } as any);
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update task');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <KeyboardAvoidingView
+                style={modalStyles.overlay}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
+                <View style={modalStyles.container}>
+                    <View style={modalStyles.handle} />
+                    <Text style={modalStyles.title}>Edit Task</Text>
+
+                    <TextInput
+                        style={modalStyles.input}
+                        value={title}
+                        onChangeText={setTitle}
+                        autoFocus
+                    />
+
+                    <Text style={modalStyles.sectionLabel}>Label</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                        {DEFAULT_LABELS.map((l) => (
+                            <TouchableOpacity
+                                key={l.id}
+                                style={[
+                                    modalStyles.labelChip,
+                                    { borderColor: l.color },
+                                    label === l.id && { backgroundColor: l.color + '20' },
+                                ]}
+                                onPress={() => setLabel(l.id)}
+                            >
+                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                <Text style={modalStyles.labelText}>{l.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    <Text style={modalStyles.sectionLabel}>Mode</Text>
+                    <View style={modalStyles.modeToggle}>
+                        <TouchableOpacity
+                            style={[modalStyles.modeButton, mode === 'home' && modalStyles.modeButtonActive]}
+                            onPress={() => setMode('home')}
+                        >
+                            <Text style={[modalStyles.modeText, mode === 'home' && modalStyles.modeTextActive]}>Home</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[modalStyles.modeButton, mode === 'work' && modalStyles.modeButtonActive]}
+                            onPress={() => setMode('work')}
+                        >
+                            <Text style={[modalStyles.modeText, mode === 'work' && modalStyles.modeTextActive]}>Work</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={modalStyles.actions}>
+                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[modalStyles.submitButton, loading && modalStyles.submitDisabled]}
+                            onPress={handleSave}
+                            disabled={loading}
+                        >
+                            <Text style={modalStyles.submitText}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
     );
 }
 
@@ -185,23 +470,48 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.md,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.sm,
     },
     greeting: {
-        ...typography.h1,
+        fontSize: fontSizes.h1,
+        fontWeight: '700' as const,
         color: colors.textPrimary,
     },
     date: {
-        ...typography.bodySmall,
+        fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
         marginTop: spacing.xs,
     },
-    statsRow: {
-        alignItems: 'flex-end',
+    addButton: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.md,
     },
-    statText: {
-        ...typography.bodySmall,
+    addButtonText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    statsContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        gap: spacing.lg,
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: spacing.xs,
+    },
+    statNumber: {
+        fontSize: fontSizes.h2,
+        fontWeight: '700' as const,
+        color: colors.primary,
+    },
+    statLabel: {
+        fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
     },
     filterRow: {
@@ -220,12 +530,12 @@ const styles = StyleSheet.create({
         backgroundColor: colors.primary,
     },
     filterText: {
-        ...typography.bodySmall,
+        fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
     },
     filterTextActive: {
         color: colors.textInverse,
-        fontWeight: '600',
+        fontWeight: '600' as const,
     },
     toolbar: {
         flexDirection: 'row',
@@ -236,35 +546,173 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.sm,
     },
     toolbarText: {
-        ...typography.body,
+        fontSize: fontSizes.h3,
         color: colors.textInverse,
-        fontWeight: '600',
+        fontWeight: '700' as const,
     },
     toolbarActions: {
         flexDirection: 'row',
-        gap: spacing.sm,
+        gap: spacing.md,
     },
-    toolbarButton: {
-        backgroundColor: colors.textInverse,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.sm,
+    toolbarIconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    toolbarButtonText: {
-        ...typography.bodySmall,
-        color: colors.primary,
-        fontWeight: '600',
-    },
-    toolbarButtonSecondary: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-    },
-    toolbarButtonTextSecondary: {
-        ...typography.bodySmall,
+    toolbarIcon: {
+        fontSize: 18,
         color: colors.textInverse,
     },
     listContent: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.xl,
+    },
+});
+
+const modalStyles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    backdrop: {
+        flex: 1,
+        backgroundColor: colors.overlay,
+    },
+    container: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: borderRadius.xl,
+        borderTopRightRadius: borderRadius.xl,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.xl + 20,
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: spacing.md,
+    },
+    title: {
+        fontSize: fontSizes.h3,
+        fontWeight: '600' as const,
+        color: colors.textPrimary,
+        marginBottom: spacing.md,
+    },
+    input: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    iconToolbar: {
+        flexDirection: 'row',
+        paddingVertical: spacing.md,
+        gap: spacing.lg,
+    },
+    toolbarItem: {
+        position: 'relative',
+    },
+    toolbarIcon: {
+        fontSize: 24,
+    },
+    labelDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    labelPicker: {
+        marginBottom: spacing.md,
+    },
+    labelChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginRight: spacing.sm,
+        gap: spacing.xs,
+    },
+    labelColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    labelText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textPrimary,
+    },
+    sectionLabel: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+        marginTop: spacing.md,
+        marginBottom: spacing.xs,
+    },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: spacing.md,
+    },
+    modeToggle: {
+        flexDirection: 'row',
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: 2,
+    },
+    modeButton: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.sm,
+    },
+    modeButtonActive: {
+        backgroundColor: colors.surface,
+    },
+    modeText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    modeTextActive: {
+        color: colors.textPrimary,
+        fontWeight: '500' as const,
+    },
+    submitButton: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.md,
+    },
+    submitDisabled: {
+        opacity: 0.5,
+    },
+    submitText: {
+        fontSize: fontSizes.body,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.lg,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: spacing.md,
+        alignItems: 'center',
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceSecondary,
+    },
+    cancelButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textSecondary,
     },
 });

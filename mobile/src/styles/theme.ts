@@ -1,3 +1,5 @@
+import { TextStyle, Platform } from 'react-native';
+
 // Minimalistic color palette
 export const colors = {
     // Primary
@@ -56,35 +58,58 @@ export const borderRadius = {
     full: 9999,
 };
 
+// Font weights that work on all platforms
+type FontWeight = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
+
+// Typography sizes - use these directly instead of spreading
+export const fontSizes = {
+    h1: 28,
+    h2: 22,
+    h3: 18,
+    body: 16,
+    bodySmall: 14,
+    caption: 12,
+};
+
+export const lineHeights = {
+    h1: 36,
+    h2: 28,
+    h3: 24,
+    body: 24,
+    bodySmall: 20,
+    caption: 16,
+};
+
+// Keep for backwards compatibility but recommend using fontSizes directly
 export const typography = {
     h1: {
         fontSize: 28,
-        fontWeight: '700' as const,
+        fontWeight: '700' as FontWeight,
         lineHeight: 36,
     },
     h2: {
         fontSize: 22,
-        fontWeight: '600' as const,
+        fontWeight: '600' as FontWeight,
         lineHeight: 28,
     },
     h3: {
         fontSize: 18,
-        fontWeight: '600' as const,
+        fontWeight: '600' as FontWeight,
         lineHeight: 24,
     },
     body: {
         fontSize: 16,
-        fontWeight: '400' as const,
+        fontWeight: '400' as FontWeight,
         lineHeight: 24,
     },
     bodySmall: {
         fontSize: 14,
-        fontWeight: '400' as const,
+        fontWeight: '400' as FontWeight,
         lineHeight: 20,
     },
     caption: {
         fontSize: 12,
-        fontWeight: '400' as const,
+        fontWeight: '400' as FontWeight,
         lineHeight: 16,
     },
 };

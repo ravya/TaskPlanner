@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -18,11 +18,31 @@ import { colors, spacing } from '../styles/theme';
 
 const Tab = createBottomTabNavigator();
 
+// Consistent tab icons: outline when inactive, filled when active
+const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
+    Dashboard: { active: '★', inactive: '☆' },
+    Tasks: { active: '☑', inactive: '☐' },
+    Projects: { active: '📁', inactive: '📂' },
+    Analytics: { active: '📊', inactive: '📈' },
+    Settings: { active: '⚙️', inactive: '⚙' },
+};
+
+function TabIcon({ routeName, focused }: { routeName: string; focused: boolean }) {
+    const icons = TAB_ICONS[routeName] || { active: '●', inactive: '○' };
+    return (
+        <Text style={{ fontSize: 22, marginBottom: 2 }}>
+            {focused ? icons.active : icons.inactive}
+        </Text>
+    );
+}
+
 function MainTabs() {
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
-                tabBarLabel: route.name,
+                tabBarIcon: ({ focused }) => (
+                    <TabIcon routeName={route.name} focused={focused} />
+                ),
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textTertiary,
                 tabBarStyle: styles.tabBar,
@@ -85,10 +105,10 @@ const styles = StyleSheet.create({
         borderTopColor: colors.border,
         paddingTop: spacing.xs,
         paddingBottom: spacing.sm,
-        height: 60,
+        height: 70,
     },
     tabLabel: {
         fontSize: 11,
-        fontWeight: '500',
+        fontWeight: '500' as const,
     },
 });

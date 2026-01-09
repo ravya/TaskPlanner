@@ -8,11 +8,14 @@ import {
     Switch,
     Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useSettings } from '../hooks';
 import { signOut } from '../services/firebase';
-import { colors, spacing, typography, borderRadius, shadows } from '../styles/theme';
+import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
+import { DEFAULT_LABELS } from '../types';
 
 export function SettingsScreen() {
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { settings, updateSettings } = useSettings();
 
@@ -28,22 +31,43 @@ export function SettingsScreen() {
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <ScrollView
+            style={[styles.container, { paddingTop: insets.top }]}
+            contentContainerStyle={styles.content}
+        >
             <Text style={styles.title}>Settings</Text>
 
             {/* Profile Section */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Profile</Text>
                 <View style={styles.card}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {user?.displayName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || '?'}
-                        </Text>
+                    <View style={styles.profileRow}>
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>
+                                {user?.displayName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || '?'}
+                            </Text>
+                        </View>
+                        <View style={styles.profileInfo}>
+                            <Text style={styles.profileName}>{user?.displayName || 'User'}</Text>
+                            <Text style={styles.profileEmail}>{user?.email}</Text>
+                        </View>
                     </View>
-                    <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>{user?.displayName || 'User'}</Text>
-                        <Text style={styles.profileEmail}>{user?.email}</Text>
-                    </View>
+                </View>
+            </View>
+
+            {/* Labels Section */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Labels</Text>
+                <View style={styles.card}>
+                    {DEFAULT_LABELS.filter(l => l.id !== 'none').map((label) => (
+                        <View key={label.id} style={styles.labelRow}>
+                            <View style={[styles.labelDot, { backgroundColor: label.color }]} />
+                            <Text style={styles.labelName}>{label.name}</Text>
+                        </View>
+                    ))}
+                    <TouchableOpacity style={styles.addLabelButton}>
+                        <Text style={styles.addLabelText}>+ Add Custom Label</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -109,7 +133,7 @@ export function SettingsScreen() {
                                         settings.defaultMode === 'personal' && styles.segmentTextActive,
                                     ]}
                                 >
-                                    Personal
+                                    Home
                                 </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -195,12 +219,25 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-    title: { ...typography.h1, color: colors.textPrimary, marginBottom: spacing.lg },
-    section: { marginBottom: spacing.lg },
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    content: {
+        padding: spacing.lg,
+        paddingBottom: spacing.xxl,
+    },
+    title: {
+        fontSize: fontSizes.h1,
+        fontWeight: '700' as const,
+        color: colors.textPrimary,
+        marginBottom: spacing.lg,
+    },
+    section: {
+        marginBottom: spacing.lg,
+    },
     sectionTitle: {
-        ...typography.bodySmall,
+        fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -211,7 +248,10 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface,
         borderRadius: borderRadius.md,
         padding: spacing.md,
-        ...shadows.sm,
+    },
+    profileRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     avatar: {
         width: 48,
@@ -222,17 +262,57 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginRight: spacing.md,
     },
-    avatarText: { ...typography.h2, color: colors.textInverse },
-    profileInfo: { flex: 1 },
-    profileName: { ...typography.body, color: colors.textPrimary, fontWeight: '600' },
-    profileEmail: { ...typography.bodySmall, color: colors.textSecondary, marginTop: 2 },
+    avatarText: {
+        fontSize: fontSizes.h2,
+        fontWeight: '600' as const,
+        color: colors.textInverse,
+    },
+    profileInfo: {
+        flex: 1,
+    },
+    profileName: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+        fontWeight: '600' as const,
+    },
+    profileEmail: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+        marginTop: 2,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.sm,
+    },
+    labelDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: spacing.md,
+    },
+    labelName: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+    },
+    addLabelButton: {
+        paddingVertical: spacing.sm,
+        marginTop: spacing.xs,
+    },
+    addLabelText: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
+    },
     settingRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: spacing.xs,
     },
-    settingLabel: { ...typography.body, color: colors.textPrimary },
+    settingLabel: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+    },
     segmentControl: {
         flexDirection: 'row',
         backgroundColor: colors.surfaceSecondary,
@@ -244,9 +324,17 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.xs,
         borderRadius: borderRadius.sm,
     },
-    segmentActive: { backgroundColor: colors.surface },
-    segmentText: { ...typography.bodySmall, color: colors.textSecondary },
-    segmentTextActive: { color: colors.textPrimary, fontWeight: '600' },
+    segmentActive: {
+        backgroundColor: colors.surface,
+    },
+    segmentText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    segmentTextActive: {
+        color: colors.textPrimary,
+        fontWeight: '600' as const,
+    },
     divider: {
         height: 1,
         backgroundColor: colors.border,
@@ -258,11 +346,14 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         alignItems: 'center',
         marginTop: spacing.md,
-        ...shadows.sm,
     },
-    signOutText: { ...typography.body, color: colors.error, fontWeight: '600' },
+    signOutText: {
+        fontSize: fontSizes.body,
+        color: colors.error,
+        fontWeight: '600' as const,
+    },
     version: {
-        ...typography.caption,
+        fontSize: fontSizes.caption,
         color: colors.textTertiary,
         textAlign: 'center',
         marginTop: spacing.lg,

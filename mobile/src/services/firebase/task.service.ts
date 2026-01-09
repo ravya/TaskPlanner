@@ -19,7 +19,7 @@ function getUserTasksRef(userId: string) {
     return collection(db, 'users', userId, TASKS_COLLECTION);
 }
 
-// Format date to YYYY-MM-DD
+// Format date to YYYY-MM-DD (UTC)
 function formatDate(date: Date | string): string {
     if (typeof date === 'string') {
         // If already a string, ensure it's in YYYY-MM-DD format
@@ -29,6 +29,33 @@ function formatDate(date: Date | string): string {
         return date;
     }
     return date.toISOString().split('T')[0];
+}
+
+// === TIMEZONE UTILITIES ===
+
+// Convert local date to UTC string for storage
+function toUTCDateString(localDate: Date): string {
+    return localDate.toISOString().split('T')[0];
+}
+
+// Get today's date in local timezone as YYYY-MM-DD
+function getTodayLocal(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// Convert UTC date string to local date string for comparison
+function utcToLocalDateString(utcDateString: string): string {
+    // Parse the UTC date and get local date components
+    const date = new Date(utcDateString + 'T12:00:00Z'); // Use noon to avoid edge cases
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Check if a UTC date string matches today's local date
+function isToday(utcDateString: string): boolean {
+    const taskLocalDate = utcToLocalDateString(utcDateString);
+    const todayLocal = getTodayLocal();
+    return taskLocalDate === todayLocal;
 }
 
 // Get tasks for a user
@@ -197,12 +224,10 @@ export function subscribeToTodayTasks(
     userId: string,
     callback: (tasks: Task[]) => void
 ): () => void {
-    const today = formatDate(new Date());
-
     return subscribeToTasks(userId, (allTasks) => {
         const todayTasks = allTasks.filter((t) => {
             const taskDate = (t as any).dueDate || (t as any).startDate;
-            return taskDate === today;
+            return taskDate && isToday(taskDate);
         });
         callback(todayTasks);
     });

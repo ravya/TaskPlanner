@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from './config';
@@ -11,6 +12,13 @@ WebBrowser.maybeCompleteAuthSession();
 // Google OAuth Client IDs
 const GOOGLE_WEB_CLIENT_ID = '721399293084-msqg42f42jme551a19vbrgosrbemutdi.apps.googleusercontent.com';
 
+// Create redirect URI using Expo's utility
+// This generates: taskplanner://auth (must be added to Google Cloud Console)
+const redirectUri = AuthSession.makeRedirectUri({
+    scheme: 'taskplanner',
+    path: 'auth',
+});
+
 // Hook for Google Sign-In
 export function useGoogleAuth() {
     const [loading, setLoading] = useState(false);
@@ -18,6 +26,7 @@ export function useGoogleAuth() {
 
     const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
         clientId: GOOGLE_WEB_CLIENT_ID,
+        redirectUri,
         // Add iOS and Android client IDs when you have them:
         // iosClientId: 'YOUR_IOS_CLIENT_ID',
         // androidClientId: 'YOUR_ANDROID_CLIENT_ID',

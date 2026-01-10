@@ -1,3 +1,3 @@
-export * from './task';
+export * from './Task';
 export * from './project';
 export * from './auth';

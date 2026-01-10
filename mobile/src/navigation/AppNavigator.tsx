@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../hooks';
 import {
@@ -18,30 +19,27 @@ import { colors, spacing } from '../styles/theme';
 
 const Tab = createBottomTabNavigator();
 
-// Consistent tab icons: outline when inactive, filled when active
-const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
-    Dashboard: { active: '★', inactive: '☆' },
-    Tasks: { active: '☑', inactive: '☐' },
-    Projects: { active: '📁', inactive: '📂' },
-    Analytics: { active: '📊', inactive: '📈' },
-    Settings: { active: '⚙️', inactive: '⚙' },
+// Tab icons using Ionicons: outline when inactive, filled when active
+const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
+    Dashboard: { active: 'home', inactive: 'home-outline' },
+    Tasks: { active: 'list', inactive: 'list-outline' },
+    Projects: { active: 'folder', inactive: 'folder-outline' },
+    Analytics: { active: 'stats-chart', inactive: 'stats-chart-outline' },
+    Settings: { active: 'settings', inactive: 'settings-outline' },
 };
 
-function TabIcon({ routeName, focused }: { routeName: string; focused: boolean }) {
-    const icons = TAB_ICONS[routeName] || { active: '●', inactive: '○' };
-    return (
-        <Text style={{ fontSize: 22, marginBottom: 2 }}>
-            {focused ? icons.active : icons.inactive}
-        </Text>
-    );
+function TabIcon({ routeName, focused, color }: { routeName: string; focused: boolean; color: string }) {
+    const icons = TAB_ICONS[routeName] || { active: 'ellipse', inactive: 'ellipse-outline' };
+    const iconName = focused ? icons.active : icons.inactive;
+    return <Ionicons name={iconName} size={24} color={color} />;
 }
 
 function MainTabs() {
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
-                tabBarIcon: ({ focused }) => (
-                    <TabIcon routeName={route.name} focused={focused} />
+                tabBarIcon: ({ focused, color }) => (
+                    <TabIcon routeName={route.name} focused={focused} color={color} />
                 ),
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textTertiary,

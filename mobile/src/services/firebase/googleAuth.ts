@@ -11,6 +11,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 // Google OAuth Client IDs
 const GOOGLE_WEB_CLIENT_ID = '721399293084-msqg42f42jme551a19vbrgosrbemutdi.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = '721399293084-12bc7h3ap3e7m0hrp8hg17hstoro5bhu.apps.googleusercontent.com';
 
 // Create redirect URI using Expo's utility
 // This automatically generates the correct URI based on environment:
@@ -31,9 +32,9 @@ export function useGoogleAuth() {
 
     const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
         clientId: GOOGLE_WEB_CLIENT_ID,
+        iosClientId: GOOGLE_IOS_CLIENT_ID,
         redirectUri,
-        // Add iOS and Android client IDs when you have them:
-        // iosClientId: 'YOUR_IOS_CLIENT_ID',
+        // Add Android client ID when you have it:
         // androidClientId: 'YOUR_ANDROID_CLIENT_ID',
     });
 

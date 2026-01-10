@@ -13,11 +13,16 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_WEB_CLIENT_ID = '721399293084-msqg42f42jme551a19vbrgosrbemutdi.apps.googleusercontent.com';
 
 // Create redirect URI using Expo's utility
-// This generates: taskplanner://auth (must be added to Google Cloud Console)
+// This automatically generates the correct URI based on environment:
+// - Expo Go: exp://192.168.x.x:8081 (development)
+// - Standalone: taskplanner://auth (production)
 const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'taskplanner',
-    path: 'auth',
+    // native option helps with standalone builds
+    native: 'taskplanner://auth',
 });
+
+console.log('OAuth Redirect URI:', redirectUri);
 
 // Hook for Google Sign-In
 export function useGoogleAuth() {

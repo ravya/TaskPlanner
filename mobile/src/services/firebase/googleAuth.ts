@@ -33,7 +33,7 @@ export function useGoogleAuth() {
     const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
         clientId: GOOGLE_WEB_CLIENT_ID,
         iosClientId: GOOGLE_IOS_CLIENT_ID,
-        redirectUri,
+        // Don't pass redirectUri for iOS - SDK handles it automatically
         // Add Android client ID when you have it:
         // androidClientId: 'YOUR_ANDROID_CLIENT_ID',
     });

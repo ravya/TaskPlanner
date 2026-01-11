@@ -188,6 +188,7 @@ export function DashboardScreen() {
                 visible={showAddModal}
                 onClose={() => setShowAddModal(false)}
                 userId={user?.uid}
+                projects={projects}
             />
 
             {/* Edit Task Modal */}
@@ -208,15 +209,19 @@ function AddTaskModal({
     visible,
     onClose,
     userId,
+    projects,
 }: {
     visible: boolean;
     onClose: () => void;
     userId?: string;
+    projects: any[];
 }) {
     const [title, setTitle] = useState('');
     const [mode, setMode] = useState<TaskMode>('home');
     const [label, setLabel] = useState<TaskLabel>('none');
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
+    const [showProjectPicker, setShowProjectPicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -229,9 +234,11 @@ function AddTaskModal({
                 mode,
                 label,
                 dueDate: new Date(),
+                projectId: selectedProjectId || undefined,
             });
             setTitle('');
             setLabel('none');
+            setSelectedProjectId(null);
             onClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to create task');
@@ -243,10 +250,12 @@ function AddTaskModal({
     const handleClose = () => {
         setTitle('');
         setLabel('none');
+        setSelectedProjectId(null);
         onClose();
     };
 
     const selectedLabel = DEFAULT_LABELS.find((l) => l.id === label);
+    const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
@@ -275,16 +284,16 @@ function AddTaskModal({
                             style={modalStyles.toolbarItem}
                             onPress={() => setShowLabelPicker(!showLabelPicker)}
                         >
-                            <Ionicons name="pricetag-outline" size={22} color={colors.textSecondary} />
-                            {label !== 'none' && (
-                                <View style={[modalStyles.labelDot, { backgroundColor: selectedLabel?.color }]} />
-                            )}
+                            <Ionicons name="pricetag-outline" size={22} color={label !== 'none' ? selectedLabel?.color : colors.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={modalStyles.toolbarItem}
+                            onPress={() => setShowProjectPicker(!showProjectPicker)}
+                        >
+                            <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
                             <Ionicons name="calendar-outline" size={22} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Ionicons name="repeat-outline" size={22} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
                             <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
@@ -309,6 +318,41 @@ function AddTaskModal({
                                 >
                                     <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
                                     <Text style={modalStyles.labelText}>{l.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )}
+
+                    {/* Project picker */}
+                    {showProjectPicker && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                            <TouchableOpacity
+                                style={[
+                                    modalStyles.labelChip,
+                                    { borderColor: colors.border },
+                                    !selectedProjectId && { backgroundColor: colors.surfaceSecondary },
+                                ]}
+                                onPress={() => {
+                                    setSelectedProjectId(null);
+                                    setShowProjectPicker(false);
+                                }}
+                            >
+                                <Text style={modalStyles.labelText}>No Project</Text>
+                            </TouchableOpacity>
+                            {projects.filter(p => !p.isArchived).map((p) => (
+                                <TouchableOpacity
+                                    key={p.id}
+                                    style={[
+                                        modalStyles.labelChip,
+                                        { borderColor: colors.primary },
+                                        selectedProjectId === p.id && { backgroundColor: colors.primaryLight + '30' },
+                                    ]}
+                                    onPress={() => {
+                                        setSelectedProjectId(p.id);
+                                        setShowProjectPicker(false);
+                                    }}
+                                >
+                                    <Text style={modalStyles.labelText}>{p.name}</Text>
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>

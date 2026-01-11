@@ -160,7 +160,6 @@ function ProjectCard({
         <TouchableOpacity style={cardStyles.container} onPress={onPress}>
             <View style={cardStyles.content}>
                 <View style={cardStyles.header}>
-                    <Ionicons name={getProjectIconName(project.icon) as any} size={20} color={colors.textSecondary} style={cardStyles.icon} />
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
                     <View style={[cardStyles.modeBadge, {
                         backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
@@ -249,22 +248,6 @@ function AddProjectModal({
                             autoFocus
                         />
 
-                        <Text style={modalStyles.label}>Icon</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
-                            {PROJECT_ICONS.map((icon) => (
-                                <TouchableOpacity
-                                    key={icon}
-                                    style={[
-                                        modalStyles.iconChip,
-                                        selectedIcon === icon && modalStyles.iconChipActive,
-                                    ]}
-                                    onPress={() => setSelectedIcon(icon)}
-                                >
-                                    <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-
                         <Text style={modalStyles.label}>Mode</Text>
                         <View style={modalStyles.modeRow}>
                             {(['home', 'work'] as const).map((m) => (
@@ -350,22 +333,6 @@ function EditProjectModal({
                         onChangeText={setName}
                         autoFocus
                     />
-
-                    <Text style={modalStyles.label}>Icon</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
-                        {PROJECT_ICONS.map((icon) => (
-                            <TouchableOpacity
-                                key={icon}
-                                style={[
-                                    modalStyles.iconChip,
-                                    selectedIcon === icon && modalStyles.iconChipActive,
-                                ]}
-                                onPress={() => setSelectedIcon(icon)}
-                            >
-                                <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
 
                     <Text style={modalStyles.label}>Mode</Text>
                     <View style={modalStyles.modeRow}>

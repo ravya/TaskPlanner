@@ -165,9 +165,11 @@ function ProjectCard({
                     <View style={[cardStyles.modeBadge, {
                         backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
                     }]}>
-                        <Text style={cardStyles.modeText}>
-                            {project.mode === 'home' ? 'H' : 'W'}
-                        </Text>
+                        <Ionicons
+                            name={project.mode === 'home' ? 'home' : 'briefcase'}
+                            size={12}
+                            color={colors.textInverse}
+                        />
                     </View>
                 </View>
                 <View style={cardStyles.meta}>

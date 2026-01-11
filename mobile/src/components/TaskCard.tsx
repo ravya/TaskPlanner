@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Task, DEFAULT_LABELS, TaskLabel } from '../types';
 import { colors, spacing, borderRadius, fontSizes } from '../styles/theme';
 
@@ -36,12 +37,14 @@ export function TaskCard({
             onLongPress={onLongPress}
             activeOpacity={0.7}
         >
-            {/* Checkbox */}
+            {/* Checkbox - circular like Things 3 */}
             <TouchableOpacity
                 style={[styles.checkbox, task.completed && styles.checkboxChecked]}
                 onPress={onToggleComplete}
             >
-                {task.completed && <Text style={styles.checkmark}>✓</Text>}
+                {task.completed && (
+                    <Ionicons name="checkmark" size={14} color={colors.textInverse} />
+                )}
             </TouchableOpacity>
 
             {/* Content */}
@@ -116,7 +119,7 @@ const styles = StyleSheet.create({
     checkbox: {
         width: 22,
         height: 22,
-        borderRadius: borderRadius.sm,
+        borderRadius: 11,
         borderWidth: 2,
         borderColor: colors.border,
         alignItems: 'center',

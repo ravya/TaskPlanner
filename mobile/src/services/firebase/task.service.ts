@@ -118,6 +118,7 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
         title: data.title,
         description: data.description || '',
         label: data.label || 'none',
+        labels: data.labels || [],
         mode: data.mode || 'home',
         tags: data.tags || [],
         dueDate: dueDate,

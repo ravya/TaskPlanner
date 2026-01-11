@@ -19,9 +19,12 @@ export function TaskCard({
     onLongPress,
     onToggleComplete,
 }: TaskCardProps) {
-    // Get label info (with fallback for legacy priority)
-    const taskLabel = (task as any).label || 'none';
-    const labelInfo = DEFAULT_LABELS.find((l) => l.id === taskLabel) || DEFAULT_LABELS[5]; // Default to 'none'
+    // Get labels info - support both labels array and legacy single label
+    const taskLabels: string[] = (task as any).labels || [(task as any).label || 'none'];
+    const labelInfos = taskLabels
+        .filter((l: string) => l !== 'none')
+        .map((l: string) => DEFAULT_LABELS.find((dl) => dl.id === l))
+        .filter(Boolean);
 
     const subtaskCount = task.subtasks?.length || 0;
     const completedSubtasks = task.subtasks?.filter((s) => s.completed).length || 0;
@@ -60,15 +63,15 @@ export function TaskCard({
 
                 {/* Meta info */}
                 <View style={styles.meta}>
-                    {/* Label badge */}
-                    {taskLabel !== 'none' && (
-                        <View style={[styles.labelBadge, { backgroundColor: labelInfo.color + '20' }]}>
+                    {/* Label badges - multiple labels supported */}
+                    {labelInfos.map((labelInfo: any) => (
+                        <View key={labelInfo.id} style={[styles.labelBadge, { backgroundColor: labelInfo.color + '20' }]}>
                             <View style={[styles.labelDot, { backgroundColor: labelInfo.color }]} />
                             <Text style={[styles.labelText, { color: labelInfo.color }]}>
                                 {labelInfo.name}
                             </Text>
                         </View>
-                    )}
+                    ))}
 
                     {task.startTime && (
                         <Text style={styles.metaText}>{task.startTime}</Text>

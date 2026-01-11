@@ -314,8 +314,11 @@ function AddTaskModal({
                         onSubmitEditing={handleSubmit}
                     />
 
-                    {/* Icon toolbar */}
+                    {/* Icon toolbar - Order: Subtasks, Label, Time, Project */}
                     <View style={modalStyles.iconToolbar}>
+                        <TouchableOpacity style={modalStyles.toolbarItem}>
+                            <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
                             onPress={() => setShowLabelPicker(!showLabelPicker)}
@@ -324,18 +327,15 @@ function AddTaskModal({
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowProjectPicker(!showProjectPicker)}
-                        >
-                            <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={modalStyles.toolbarItem}
                             onPress={() => setShowDatePicker(!showDatePicker)}
                         >
                             <Ionicons name="calendar-outline" size={22} color={showDatePicker ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
+                        <TouchableOpacity
+                            style={modalStyles.toolbarItem}
+                            onPress={() => setShowProjectPicker(!showProjectPicker)}
+                        >
+                            <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
@@ -855,11 +855,14 @@ const modalStyles = StyleSheet.create({
         paddingVertical: spacing.md,
         alignItems: 'center',
         borderRadius: borderRadius.md,
-        backgroundColor: colors.surfaceSecondary,
+        backgroundColor: colors.error + '15',
+        borderWidth: 1,
+        borderColor: colors.error,
     },
     cancelButtonText: {
         fontSize: fontSizes.body,
-        color: colors.textSecondary,
+        color: colors.error,
+        fontWeight: '600' as const,
     },
     datePickerContainer: {
         backgroundColor: colors.surfaceSecondary,

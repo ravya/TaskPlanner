@@ -254,7 +254,7 @@ function AddTaskModal({
     const [mode, setMode] = useState<TaskMode>(defaultMode);
     const [label, setLabel] = useState<TaskLabel>('none');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-    const [dueDate, setDueDate] = useState<Date>(new Date());
+    const [dueDate, setDueDate] = useState<Date | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [showProjectPicker, setShowProjectPicker] = useState(false);
@@ -287,6 +287,10 @@ function AddTaskModal({
         setTitle('');
         setLabel('none');
         setSelectedProjectId(null);
+        setDueDate(null);
+        setShowDatePicker(false);
+        setShowLabelPicker(false);
+        setShowProjectPicker(false);
         onClose();
     };
 
@@ -314,26 +318,35 @@ function AddTaskModal({
                         onSubmitEditing={handleSubmit}
                     />
 
-                    {/* Icon toolbar - Order: Subtasks, Label, Time, Project */}
+                    {/* Icon toolbar - Order: Label, Time, Project */}
                     <View style={modalStyles.iconToolbar}>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
-                        </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowLabelPicker(!showLabelPicker)}
+                            onPress={() => {
+                                setShowLabelPicker(!showLabelPicker);
+                                setShowDatePicker(false);
+                                setShowProjectPicker(false);
+                            }}
                         >
                             <Ionicons name="pricetag-outline" size={22} color={label !== 'none' ? selectedLabel?.color : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowDatePicker(!showDatePicker)}
+                            onPress={() => {
+                                setShowDatePicker(!showDatePicker);
+                                setShowLabelPicker(false);
+                                setShowProjectPicker(false);
+                            }}
                         >
-                            <Ionicons name="calendar-outline" size={22} color={showDatePicker ? colors.primary : colors.textSecondary} />
+                            <Ionicons name="calendar-outline" size={22} color={dueDate ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowProjectPicker(!showProjectPicker)}
+                            onPress={() => {
+                                setShowProjectPicker(!showProjectPicker);
+                                setShowLabelPicker(false);
+                                setShowDatePicker(false);
+                            }}
                         >
                             <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
@@ -400,9 +413,11 @@ function AddTaskModal({
                     {/* Date picker */}
                     {showDatePicker && (
                         <View style={modalStyles.datePickerContainer}>
-                            <Text style={modalStyles.dateLabel}>Due Date: {dueDate.toLocaleDateString()}</Text>
+                            <Text style={modalStyles.dateLabel}>
+                                Due Date: {dueDate ? dueDate.toLocaleDateString() : 'Not set'}
+                            </Text>
                             <DateTimePicker
-                                value={dueDate}
+                                value={dueDate || new Date()}
                                 mode="date"
                                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                                 onChange={(event, selectedDate) => {
@@ -415,14 +430,23 @@ function AddTaskModal({
                                 }}
                                 minimumDate={new Date()}
                             />
-                            {Platform.OS === 'ios' && (
+                            <View style={modalStyles.datePickerActions}>
+                                <TouchableOpacity
+                                    style={modalStyles.datePickerClear}
+                                    onPress={() => {
+                                        setDueDate(null);
+                                        setShowDatePicker(false);
+                                    }}
+                                >
+                                    <Text style={modalStyles.datePickerClearText}>Clear</Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity
                                     style={modalStyles.datePickerDone}
                                     onPress={() => setShowDatePicker(false)}
                                 >
                                     <Text style={modalStyles.datePickerDoneText}>Done</Text>
                                 </TouchableOpacity>
-                            )}
+                            </View>
                         </View>
                     )}
 
@@ -941,5 +965,19 @@ const modalStyles = StyleSheet.create({
     dateButtonText: {
         fontSize: fontSizes.body,
         color: colors.primary,
+    },
+    datePickerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+    },
+    datePickerClear: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+    },
+    datePickerClearText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.error,
+        fontWeight: '500' as const,
     },
 });

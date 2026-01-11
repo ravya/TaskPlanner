@@ -282,26 +282,35 @@ function AddTaskModal({
                         autoFocus
                     />
 
-                    {/* Icon toolbar - Order: Subtasks, Label, Time, Project */}
+                    {/* Icon toolbar - Order: Label, Time, Project */}
                     <View style={modalStyles.iconToolbar}>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
-                        </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowLabelPicker(!showLabelPicker)}
+                            onPress={() => {
+                                setShowLabelPicker(!showLabelPicker);
+                                setShowDatePicker(false);
+                                setShowProjectPicker(false);
+                            }}
                         >
                             <Ionicons name="pricetag-outline" size={22} color={label !== 'none' ? selectedLabel?.color : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowDatePicker(!showDatePicker)}
+                            onPress={() => {
+                                setShowDatePicker(!showDatePicker);
+                                setShowLabelPicker(false);
+                                setShowProjectPicker(false);
+                            }}
                         >
-                            <Ionicons name="calendar-outline" size={22} color={showDatePicker ? colors.primary : colors.textSecondary} />
+                            <Ionicons name="calendar-outline" size={22} color={dueDate ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={modalStyles.toolbarItem}
-                            onPress={() => setShowProjectPicker(!showProjectPicker)}
+                            onPress={() => {
+                                setShowProjectPicker(!showProjectPicker);
+                                setShowLabelPicker(false);
+                                setShowDatePicker(false);
+                            }}
                         >
                             <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>

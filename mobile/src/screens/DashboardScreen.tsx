@@ -468,6 +468,25 @@ function EditTaskModal({
         }
     };
 
+    const handleDelete = async () => {
+        if (!userId) return;
+        Alert.alert('Delete Task', 'Are you sure you want to delete this task?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteTask(userId, task.id);
+                        onClose();
+                    } catch (error) {
+                        Alert.alert('Error', 'Failed to delete task');
+                    }
+                },
+            },
+        ]);
+    };
+
     return (
         <Modal visible={visible} animationType="slide" transparent>
             <KeyboardAvoidingView
@@ -477,7 +496,12 @@ function EditTaskModal({
                 <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
                 <View style={modalStyles.container}>
                     <View style={modalStyles.handle} />
-                    <Text style={modalStyles.title}>Edit Task</Text>
+                    <View style={modalStyles.editHeader}>
+                        <Text style={modalStyles.title}>Edit Task</Text>
+                        <TouchableOpacity onPress={handleDelete}>
+                            <Ionicons name="trash-outline" size={24} color={colors.error} />
+                        </TouchableOpacity>
+                    </View>
 
                     <TextInput
                         style={modalStyles.input}
@@ -684,6 +708,11 @@ const modalStyles = StyleSheet.create({
         fontWeight: '600' as const,
         color: colors.textPrimary,
         marginBottom: spacing.md,
+    },
+    editHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     input: {
         fontSize: fontSizes.body,

@@ -160,7 +160,7 @@ function ProjectCard({
         <TouchableOpacity style={cardStyles.container} onPress={onPress}>
             <View style={cardStyles.content}>
                 <View style={cardStyles.header}>
-                    <Text style={cardStyles.icon}>{project.icon || '📁'}</Text>
+                    <Ionicons name={(project.icon || 'folder') as any} size={20} color={colors.textSecondary} style={cardStyles.icon} />
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
                     <View style={[cardStyles.modeBadge, {
                         backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
@@ -259,7 +259,7 @@ function AddProjectModal({
                                 ]}
                                 onPress={() => setSelectedIcon(icon)}
                             >
-                                <Text style={modalStyles.iconText}>{icon}</Text>
+                                <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -360,7 +360,7 @@ function EditProjectModal({
                                 ]}
                                 onPress={() => setSelectedIcon(icon)}
                             >
-                                <Text style={modalStyles.iconText}>{icon}</Text>
+                                <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
                         ))}
                     </ScrollView>

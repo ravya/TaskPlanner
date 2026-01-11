@@ -27,4 +27,15 @@ export interface ProjectFormData {
     icon?: string;
 }
 
-export const PROJECT_ICONS = ['📁', '🏠', '💼', '🎯', '📚', '💡', '🚀', '⭐', '📥'];
+// Ionicons names for project icons
+export const PROJECT_ICONS = [
+    'folder',
+    'home',
+    'briefcase',
+    'flag',
+    'book',
+    'bulb',
+    'rocket',
+    'star',
+    'archive'
+];

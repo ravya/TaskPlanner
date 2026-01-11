@@ -19,7 +19,7 @@ import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { createProject, deleteProject, updateProject } from '../services/firebase';
-import { Project, ProjectMode, PROJECT_ICONS } from '../types';
+import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName } from '../types';
 
 export function ProjectsScreen() {
     const insets = useSafeAreaInsets();
@@ -160,7 +160,7 @@ function ProjectCard({
         <TouchableOpacity style={cardStyles.container} onPress={onPress}>
             <View style={cardStyles.content}>
                 <View style={cardStyles.header}>
-                    <Ionicons name={(project.icon || 'folder') as any} size={20} color={colors.textSecondary} style={cardStyles.icon} />
+                    <Ionicons name={getProjectIconName(project.icon) as any} size={20} color={colors.textSecondary} style={cardStyles.icon} />
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
                     <View style={[cardStyles.modeBadge, {
                         backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
@@ -239,45 +239,47 @@ function AddProjectModal({
                     <View style={modalStyles.handle} />
                     <Text style={modalStyles.title}>New Project</Text>
 
-                    <TextInput
-                        style={modalStyles.input}
-                        placeholder="Project name"
-                        placeholderTextColor={colors.textTertiary}
-                        value={name}
-                        onChangeText={setName}
-                        autoFocus
-                    />
+                    <ScrollView showsVerticalScrollIndicator={false} style={modalStyles.scrollContent}>
+                        <TextInput
+                            style={modalStyles.input}
+                            placeholder="Project name"
+                            placeholderTextColor={colors.textTertiary}
+                            value={name}
+                            onChangeText={setName}
+                            autoFocus
+                        />
 
-                    <Text style={modalStyles.label}>Icon</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
-                        {PROJECT_ICONS.map((icon) => (
-                            <TouchableOpacity
-                                key={icon}
-                                style={[
-                                    modalStyles.iconChip,
-                                    selectedIcon === icon && modalStyles.iconChipActive,
-                                ]}
-                                onPress={() => setSelectedIcon(icon)}
-                            >
-                                <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
-                            </TouchableOpacity>
-                        ))}
+                        <Text style={modalStyles.label}>Icon</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
+                            {PROJECT_ICONS.map((icon) => (
+                                <TouchableOpacity
+                                    key={icon}
+                                    style={[
+                                        modalStyles.iconChip,
+                                        selectedIcon === icon && modalStyles.iconChipActive,
+                                    ]}
+                                    onPress={() => setSelectedIcon(icon)}
+                                >
+                                    <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? colors.primary : colors.textSecondary} />
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        <Text style={modalStyles.label}>Mode</Text>
+                        <View style={modalStyles.modeRow}>
+                            {(['home', 'work'] as const).map((m) => (
+                                <TouchableOpacity
+                                    key={m}
+                                    style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
+                                    onPress={() => setMode(m)}
+                                >
+                                    <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                        {m === 'home' ? 'Home' : 'Work'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </ScrollView>
-
-                    <Text style={modalStyles.label}>Mode</Text>
-                    <View style={modalStyles.modeRow}>
-                        {(['home', 'work'] as const).map((m) => (
-                            <TouchableOpacity
-                                key={m}
-                                style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
-                                onPress={() => setMode(m)}
-                            >
-                                <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
-                                    {m === 'home' ? 'Home' : 'Work'}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity style={modalStyles.cancelButton} onPress={handleClose}>
@@ -540,7 +542,10 @@ const modalStyles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         paddingTop: spacing.sm,
         paddingBottom: spacing.xxl,
-        maxHeight: '70%',
+        maxHeight: '80%',
+    },
+    scrollContent: {
+        flexGrow: 0,
     },
     handle: {
         width: 40,

@@ -14,6 +14,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTodayTasks, useAuth, useProjects } from '../hooks';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState, LoadingState } from '../components/EmptyState';
@@ -274,19 +275,19 @@ function AddTaskModal({
                             style={modalStyles.toolbarItem}
                             onPress={() => setShowLabelPicker(!showLabelPicker)}
                         >
-                            <Text style={modalStyles.toolbarIcon}>🏷️</Text>
+                            <Ionicons name="pricetag-outline" size={22} color={colors.textSecondary} />
                             {label !== 'none' && (
                                 <View style={[modalStyles.labelDot, { backgroundColor: selectedLabel?.color }]} />
                             )}
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>📅</Text>
+                            <Ionicons name="calendar-outline" size={22} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>🔄</Text>
+                            <Ionicons name="repeat-outline" size={22} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>☑️</Text>
+                            <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 

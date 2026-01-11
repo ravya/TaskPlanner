@@ -15,11 +15,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { createProject, deleteProject, updateProject } from '../services/firebase';
-import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName } from '../types';
+import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName, TaskLabel, DEFAULT_LABELS } from '../types';
 
 export function ProjectsScreen() {
     const insets = useSafeAreaInsets();
@@ -205,6 +206,10 @@ function AddProjectModal({
     const [name, setName] = useState('');
     const [mode, setMode] = useState<ProjectMode>('home');
     const [selectedIcon, setSelectedIcon] = useState(PROJECT_ICONS[0]);
+    const [deadline, setDeadline] = useState<Date | null>(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [label, setLabel] = useState<TaskLabel>('none');
+    const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -212,8 +217,16 @@ function AddProjectModal({
 
         try {
             setLoading(true);
-            await createProject(userId, { name: name.trim(), mode, icon: selectedIcon });
+            await createProject(userId, {
+                name: name.trim(),
+                mode,
+                icon: selectedIcon,
+                deadline: deadline || undefined,
+                label: label !== 'none' ? label : undefined,
+            });
             setName('');
+            setDeadline(null);
+            setLabel('none');
             onClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to create project');
@@ -262,6 +275,68 @@ function AddProjectModal({
                                 </TouchableOpacity>
                             ))}
                         </View>
+
+                        {/* Deadline */}
+                        <Text style={modalStyles.label}>Deadline (Optional)</Text>
+                        <TouchableOpacity
+                            style={modalStyles.dateButton}
+                            onPress={() => setShowDatePicker(!showDatePicker)}
+                        >
+                            <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
+                            <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
+                                {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <View style={modalStyles.datePickerContainer}>
+                                <DateTimePicker
+                                    value={deadline || new Date()}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={(event, selectedDate) => {
+                                        if (Platform.OS === 'android') {
+                                            setShowDatePicker(false);
+                                        }
+                                        if (selectedDate) {
+                                            setDeadline(selectedDate);
+                                        }
+                                    }}
+                                    minimumDate={new Date()}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <View style={modalStyles.datePickerActions}>
+                                        <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
+                                            <Text style={modalStyles.datePickerClear}>Clear</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                            <Text style={modalStyles.datePickerDone}>Done</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Label */}
+                        <Text style={modalStyles.label}>Label (Optional)</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                            <TouchableOpacity
+                                style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                                onPress={() => setLabel('none')}
+                            >
+                                <Text style={modalStyles.labelChipText}>None</Text>
+                            </TouchableOpacity>
+                            {DEFAULT_LABELS.filter(l => l.id !== 'none').map((l) => (
+                                <TouchableOpacity
+                                    key={l.id}
+                                    style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                    onPress={() => setLabel(l.id)}
+                                >
+                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                    <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </ScrollView>
 
                     <View style={modalStyles.actions}>
@@ -613,5 +688,61 @@ const modalStyles = StyleSheet.create({
     },
     buttonDisabled: {
         opacity: 0.5,
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        gap: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    dateButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textSecondary,
+    },
+    datePickerContainer: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        marginBottom: spacing.md,
+    },
+    datePickerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+    },
+    datePickerClear: {
+        fontSize: fontSizes.body,
+        color: colors.error,
+    },
+    datePickerDone: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
+        fontWeight: '500' as const,
+    },
+    labelPicker: {
+        marginBottom: spacing.md,
+    },
+    labelChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginRight: spacing.sm,
+        gap: spacing.xs,
+    },
+    labelColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    labelChipText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textPrimary,
     },
 });

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTasks, useAuth, useSettings, useProjects } from '../hooks';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState, LoadingState } from '../components/EmptyState';
@@ -222,6 +223,8 @@ function AddTaskModal({
     const [mode, setMode] = useState<TaskMode>(defaultMode);
     const [label, setLabel] = useState<TaskLabel>('none');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+    const [dueDate, setDueDate] = useState<Date>(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [showProjectPicker, setShowProjectPicker] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -235,7 +238,7 @@ function AddTaskModal({
                 title: title.trim(),
                 mode,
                 label,
-                dueDate: new Date(),
+                dueDate,
                 projectId: selectedProjectId || undefined,
             });
             setTitle('');
@@ -293,8 +296,11 @@ function AddTaskModal({
                         >
                             <Ionicons name="folder-outline" size={22} color={selectedProjectId ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Ionicons name="calendar-outline" size={22} color={colors.textSecondary} />
+                        <TouchableOpacity
+                            style={modalStyles.toolbarItem}
+                            onPress={() => setShowDatePicker(!showDatePicker)}
+                        >
+                            <Ionicons name="calendar-outline" size={22} color={showDatePicker ? colors.primary : colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={modalStyles.toolbarItem}>
                             <Ionicons name="checkbox-outline" size={22} color={colors.textSecondary} />
@@ -357,6 +363,35 @@ function AddTaskModal({
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
+                    )}
+
+                    {/* Date picker */}
+                    {showDatePicker && (
+                        <View style={modalStyles.datePickerContainer}>
+                            <Text style={modalStyles.dateLabel}>Due Date: {dueDate.toLocaleDateString()}</Text>
+                            <DateTimePicker
+                                value={dueDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={(event, selectedDate) => {
+                                    if (Platform.OS === 'android') {
+                                        setShowDatePicker(false);
+                                    }
+                                    if (selectedDate) {
+                                        setDueDate(selectedDate);
+                                    }
+                                }}
+                                minimumDate={new Date()}
+                            />
+                            {Platform.OS === 'ios' && (
+                                <TouchableOpacity
+                                    style={modalStyles.datePickerDone}
+                                    onPress={() => setShowDatePicker(false)}
+                                >
+                                    <Text style={modalStyles.datePickerDoneText}>Done</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     )}
 
                     <View style={modalStyles.row}>
@@ -770,5 +805,30 @@ const modalStyles = StyleSheet.create({
     cancelButtonText: {
         fontSize: fontSizes.body,
         color: colors.textSecondary,
+    },
+    datePickerContainer: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        marginBottom: spacing.md,
+    },
+    dateLabel: {
+        fontSize: fontSizes.body,
+        color: colors.textPrimary,
+        fontWeight: '500' as const,
+        marginBottom: spacing.sm,
+    },
+    datePickerDone: {
+        alignSelf: 'flex-end',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        backgroundColor: colors.primary,
+        borderRadius: borderRadius.sm,
+        marginTop: spacing.sm,
+    },
+    datePickerDoneText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textInverse,
+        fontWeight: '500' as const,
     },
 });

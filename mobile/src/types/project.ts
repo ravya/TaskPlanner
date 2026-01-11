@@ -25,6 +25,8 @@ export interface ProjectFormData {
     description?: string;
     mode: ProjectMode;
     icon?: string;
+    deadline?: Date;
+    label?: string;
 }
 
 // Ionicons names for project icons

@@ -111,6 +111,22 @@ export function SettingsScreen() {
                                     Mon
                                 </Text>
                             </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.segment,
+                                    settings.startOfWeek === 'saturday' && styles.segmentActive,
+                                ]}
+                                onPress={() => updateSettings({ startOfWeek: 'saturday' })}
+                            >
+                                <Text
+                                    style={[
+                                        styles.segmentText,
+                                        settings.startOfWeek === 'saturday' && styles.segmentTextActive,
+                                    ]}
+                                >
+                                    Sat
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
 

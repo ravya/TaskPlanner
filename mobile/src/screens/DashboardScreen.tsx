@@ -175,7 +175,7 @@ export function DashboardScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <EmptyState
-                        icon="☆"
+                        icon="today-outline"
                         title="No tasks for today"
                         subtitle="Tap + Add to create a task"
                     />

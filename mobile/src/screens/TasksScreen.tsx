@@ -175,7 +175,7 @@ export function TasksScreen() {
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
-                    <EmptyState icon="☐" title="No tasks" subtitle="Tap + Add to create a task" />
+                    <EmptyState icon="checkbox-outline" title="No tasks" subtitle="Tap + Add to create a task" />
                 }
             />
 

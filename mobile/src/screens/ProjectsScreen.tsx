@@ -14,6 +14,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
@@ -118,7 +119,7 @@ export function ProjectsScreen() {
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
-                    <EmptyState icon="📂" title="No projects" subtitle="Tap + New to create a project" />
+                    <EmptyState icon="folder-open-outline" title="No projects" subtitle="Tap + New to create a project" />
                 }
             />
 
@@ -175,10 +176,10 @@ function ProjectCard({
                     </Text>
                     <View style={cardStyles.actions}>
                         <TouchableOpacity onPress={onArchive} style={cardStyles.actionBtn}>
-                            <Text style={cardStyles.actionIcon}>📥</Text>
+                            <Ionicons name="archive-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={onDelete} style={cardStyles.actionBtn}>
-                            <Text style={cardStyles.actionIcon}>🗑</Text>
+                            <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </View>

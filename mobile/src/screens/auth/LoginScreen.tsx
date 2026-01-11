@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     useWindowDimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { signIn, useGoogleAuth } from '../../services/firebase';
 
@@ -172,7 +173,11 @@ export function LoginScreen({ onNavigateToRegister }: LoginScreenProps) {
                                 style={styles.eyeButton}
                                 onPress={() => setShowPassword(!showPassword)}
                             >
-                                <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                <Ionicons
+                                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                    size={22}
+                                    color={colors.textSecondary}
+                                />
                             </TouchableOpacity>
                         </View>
 

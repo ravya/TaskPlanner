@@ -483,6 +483,8 @@ function EditTaskModal({
     const [title, setTitle] = useState(task.title);
     const [mode, setMode] = useState<TaskMode>(task.mode);
     const [label, setLabel] = useState<TaskLabel>((task as any).label || 'none');
+    const [dueDate, setDueDate] = useState<Date>(task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate));
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSave = async () => {
@@ -494,6 +496,7 @@ function EditTaskModal({
                 title: title.trim(),
                 mode,
                 label,
+                dueDate,
             } as any);
             onClose();
         } catch (error) {
@@ -578,6 +581,42 @@ function EditTaskModal({
                             <Text style={[modalStyles.modeText, mode === 'work' && modalStyles.modeTextActive]}>Work</Text>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Due Date */}
+                    <Text style={modalStyles.sectionLabel}>Due Date</Text>
+                    <TouchableOpacity
+                        style={modalStyles.dateButton}
+                        onPress={() => setShowDatePicker(!showDatePicker)}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                        <Text style={modalStyles.dateButtonText}>{dueDate.toLocaleDateString()}</Text>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <View style={modalStyles.datePickerContainer}>
+                            <DateTimePicker
+                                value={dueDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={(event, selectedDate) => {
+                                    if (Platform.OS === 'android') {
+                                        setShowDatePicker(false);
+                                    }
+                                    if (selectedDate) {
+                                        setDueDate(selectedDate);
+                                    }
+                                }}
+                            />
+                            {Platform.OS === 'ios' && (
+                                <TouchableOpacity
+                                    style={modalStyles.datePickerDone}
+                                    onPress={() => setShowDatePicker(false)}
+                                >
+                                    <Text style={modalStyles.datePickerDoneText}>Done</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
@@ -888,5 +927,19 @@ const modalStyles = StyleSheet.create({
         fontSize: fontSizes.bodySmall,
         color: colors.textInverse,
         fontWeight: '500' as const,
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        gap: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    dateButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
     },
 });

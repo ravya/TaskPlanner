@@ -15,16 +15,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTodayTasks, useAuth, useProjects } from '../hooks';
+import { useTodayTasks, useAuth, useProjects, useSettings } from '../hooks';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
-import { toggleTaskComplete, bulkToggleComplete, createTask, updateTask } from '../services/firebase';
+import { toggleTaskComplete, bulkToggleComplete, createTask, updateTask, deleteTask } from '../services/firebase';
 import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
 export function DashboardScreen() {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
+    const { settings } = useSettings();
     const { tasks, loading, refresh } = useTodayTasks(user?.uid);
     const { projects } = useProjects(user?.uid);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -86,6 +87,32 @@ export function DashboardScreen() {
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
     }, []);
+
+    const handleBulkDelete = useCallback(async () => {
+        if (!user || selectedIds.size === 0) return;
+        Alert.alert(
+            'Delete Tasks',
+            `Are you sure you want to delete ${selectedIds.size} task(s)?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await Promise.all(
+                                Array.from(selectedIds).map(id => deleteTask(user.uid, id))
+                            );
+                            setSelectedIds(new Set());
+                            refresh();
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete tasks');
+                        }
+                    },
+                },
+            ]
+        );
+    }, [user, selectedIds, refresh]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -150,10 +177,13 @@ export function DashboardScreen() {
                     <Text style={styles.toolbarText}>{selectedIds.size}</Text>
                     <View style={styles.toolbarActions}>
                         <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkComplete}>
-                            <Text style={styles.toolbarIcon}>✓</Text>
+                            <Ionicons name="checkmark" size={20} color={colors.success} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkDelete}>
+                            <Ionicons name="trash-outline" size={20} color={colors.error} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.toolbarIconBtn} onPress={clearSelection}>
-                            <Text style={styles.toolbarIcon}>✕</Text>
+                            <Ionicons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -189,6 +219,7 @@ export function DashboardScreen() {
                 onClose={() => setShowAddModal(false)}
                 userId={user?.uid}
                 projects={projects}
+                defaultMode={settings.defaultMode === 'personal' ? 'home' : 'work'}
             />
 
             {/* Edit Task Modal */}
@@ -210,14 +241,16 @@ function AddTaskModal({
     onClose,
     userId,
     projects,
+    defaultMode = 'home',
 }: {
     visible: boolean;
     onClose: () => void;
     userId?: string;
     projects: any[];
+    defaultMode?: TaskMode;
 }) {
     const [title, setTitle] = useState('');
-    const [mode, setMode] = useState<TaskMode>('home');
+    const [mode, setMode] = useState<TaskMode>(defaultMode);
     const [label, setLabel] = useState<TaskLabel>('none');
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [showLabelPicker, setShowLabelPicker] = useState(false);

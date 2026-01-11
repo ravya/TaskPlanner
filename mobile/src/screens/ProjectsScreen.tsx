@@ -14,11 +14,13 @@ import {
     ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { createProject, deleteProject, updateProject } from '../services/firebase';
-import { Project, ProjectMode, PROJECT_ICONS } from '../types';
+import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName, TaskLabel, DEFAULT_LABELS } from '../types';
 
 export function ProjectsScreen() {
     const insets = useSafeAreaInsets();
@@ -118,7 +120,7 @@ export function ProjectsScreen() {
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
-                    <EmptyState icon="📂" title="No projects" subtitle="Tap + New to create a project" />
+                    <EmptyState icon="folder-open-outline" title="No projects" subtitle="Tap + New to create a project" />
                 }
             />
 
@@ -159,14 +161,15 @@ function ProjectCard({
         <TouchableOpacity style={cardStyles.container} onPress={onPress}>
             <View style={cardStyles.content}>
                 <View style={cardStyles.header}>
-                    <Text style={cardStyles.icon}>{project.icon || '📁'}</Text>
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
                     <View style={[cardStyles.modeBadge, {
                         backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
                     }]}>
-                        <Text style={cardStyles.modeText}>
-                            {project.mode === 'home' ? 'H' : 'W'}
-                        </Text>
+                        <Ionicons
+                            name={project.mode === 'home' ? 'home' : 'briefcase'}
+                            size={12}
+                            color={colors.textInverse}
+                        />
                     </View>
                 </View>
                 <View style={cardStyles.meta}>
@@ -175,10 +178,10 @@ function ProjectCard({
                     </Text>
                     <View style={cardStyles.actions}>
                         <TouchableOpacity onPress={onArchive} style={cardStyles.actionBtn}>
-                            <Text style={cardStyles.actionIcon}>📥</Text>
+                            <Ionicons name="archive-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={onDelete} style={cardStyles.actionBtn}>
-                            <Text style={cardStyles.actionIcon}>🗑</Text>
+                            <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -203,6 +206,10 @@ function AddProjectModal({
     const [name, setName] = useState('');
     const [mode, setMode] = useState<ProjectMode>('home');
     const [selectedIcon, setSelectedIcon] = useState(PROJECT_ICONS[0]);
+    const [deadline, setDeadline] = useState<Date | null>(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [label, setLabel] = useState<TaskLabel>('none');
+    const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -210,8 +217,16 @@ function AddProjectModal({
 
         try {
             setLoading(true);
-            await createProject(userId, { name: name.trim(), mode, icon: selectedIcon });
+            await createProject(userId, {
+                name: name.trim(),
+                mode,
+                icon: selectedIcon,
+                deadline: deadline || undefined,
+                label: label !== 'none' ? label : undefined,
+            });
             setName('');
+            setDeadline(null);
+            setLabel('none');
             onClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to create project');
@@ -236,45 +251,93 @@ function AddProjectModal({
                     <View style={modalStyles.handle} />
                     <Text style={modalStyles.title}>New Project</Text>
 
-                    <TextInput
-                        style={modalStyles.input}
-                        placeholder="Project name"
-                        placeholderTextColor={colors.textTertiary}
-                        value={name}
-                        onChangeText={setName}
-                        autoFocus
-                    />
+                    <ScrollView showsVerticalScrollIndicator={false} style={modalStyles.scrollContent}>
+                        <TextInput
+                            style={modalStyles.input}
+                            placeholder="Project name"
+                            placeholderTextColor={colors.textTertiary}
+                            value={name}
+                            onChangeText={setName}
+                            autoFocus
+                        />
 
-                    <Text style={modalStyles.label}>Icon</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
-                        {PROJECT_ICONS.map((icon) => (
+                        <Text style={modalStyles.label}>Mode</Text>
+                        <View style={modalStyles.modeRow}>
+                            {(['home', 'work'] as const).map((m) => (
+                                <TouchableOpacity
+                                    key={m}
+                                    style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
+                                    onPress={() => setMode(m)}
+                                >
+                                    <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                        {m === 'home' ? 'Home' : 'Work'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Deadline */}
+                        <Text style={modalStyles.label}>Deadline (Optional)</Text>
+                        <TouchableOpacity
+                            style={modalStyles.dateButton}
+                            onPress={() => setShowDatePicker(!showDatePicker)}
+                        >
+                            <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
+                            <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
+                                {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <View style={modalStyles.datePickerContainer}>
+                                <DateTimePicker
+                                    value={deadline || new Date()}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={(event, selectedDate) => {
+                                        if (Platform.OS === 'android') {
+                                            setShowDatePicker(false);
+                                        }
+                                        if (selectedDate) {
+                                            setDeadline(selectedDate);
+                                        }
+                                    }}
+                                    minimumDate={new Date()}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <View style={modalStyles.datePickerActions}>
+                                        <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
+                                            <Text style={modalStyles.datePickerClear}>Clear</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                            <Text style={modalStyles.datePickerDone}>Done</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Label */}
+                        <Text style={modalStyles.label}>Label (Optional)</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
                             <TouchableOpacity
-                                key={icon}
-                                style={[
-                                    modalStyles.iconChip,
-                                    selectedIcon === icon && modalStyles.iconChipActive,
-                                ]}
-                                onPress={() => setSelectedIcon(icon)}
+                                style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                                onPress={() => setLabel('none')}
                             >
-                                <Text style={modalStyles.iconText}>{icon}</Text>
+                                <Text style={modalStyles.labelChipText}>None</Text>
                             </TouchableOpacity>
-                        ))}
+                            {DEFAULT_LABELS.filter(l => l.id !== 'none').map((l) => (
+                                <TouchableOpacity
+                                    key={l.id}
+                                    style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                    onPress={() => setLabel(l.id)}
+                                >
+                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                    <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </ScrollView>
-
-                    <Text style={modalStyles.label}>Mode</Text>
-                    <View style={modalStyles.modeRow}>
-                        {(['home', 'work'] as const).map((m) => (
-                            <TouchableOpacity
-                                key={m}
-                                style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
-                                onPress={() => setMode(m)}
-                            >
-                                <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
-                                    {m === 'home' ? 'Home' : 'Work'}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity style={modalStyles.cancelButton} onPress={handleClose}>
@@ -308,6 +371,9 @@ function EditProjectModal({
     const [name, setName] = useState(project.name);
     const [mode, setMode] = useState<ProjectMode>(project.mode);
     const [selectedIcon, setSelectedIcon] = useState(project.icon || PROJECT_ICONS[0]);
+    const [deadline, setDeadline] = useState<Date | null>((project as any).deadline || null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [label, setLabel] = useState<TaskLabel>((project as any).label || 'none');
     const [loading, setLoading] = useState(false);
 
     const handleSave = async () => {
@@ -319,6 +385,8 @@ function EditProjectModal({
                 name: name.trim(),
                 mode,
                 icon: selectedIcon,
+                deadline: deadline || undefined,
+                label: label !== 'none' ? label : undefined,
             });
             onClose();
         } catch (error) {
@@ -346,22 +414,6 @@ function EditProjectModal({
                         autoFocus
                     />
 
-                    <Text style={modalStyles.label}>Icon</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.iconRow}>
-                        {PROJECT_ICONS.map((icon) => (
-                            <TouchableOpacity
-                                key={icon}
-                                style={[
-                                    modalStyles.iconChip,
-                                    selectedIcon === icon && modalStyles.iconChipActive,
-                                ]}
-                                onPress={() => setSelectedIcon(icon)}
-                            >
-                                <Text style={modalStyles.iconText}>{icon}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-
                     <Text style={modalStyles.label}>Mode</Text>
                     <View style={modalStyles.modeRow}>
                         {(['home', 'work'] as const).map((m) => (
@@ -376,6 +428,68 @@ function EditProjectModal({
                             </TouchableOpacity>
                         ))}
                     </View>
+
+                    {/* Deadline */}
+                    <Text style={modalStyles.label}>Deadline (Optional)</Text>
+                    <TouchableOpacity
+                        style={modalStyles.dateButton}
+                        onPress={() => setShowDatePicker(!showDatePicker)}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
+                        <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
+                            {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <View style={modalStyles.datePickerContainer}>
+                            <DateTimePicker
+                                value={deadline || new Date()}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={(event, selectedDate) => {
+                                    if (Platform.OS === 'android') {
+                                        setShowDatePicker(false);
+                                    }
+                                    if (selectedDate) {
+                                        setDeadline(selectedDate);
+                                    }
+                                }}
+                                minimumDate={new Date()}
+                            />
+                            {Platform.OS === 'ios' && (
+                                <View style={modalStyles.datePickerActions}>
+                                    <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
+                                        <Text style={modalStyles.datePickerClear}>Clear</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                        <Text style={modalStyles.datePickerDone}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Label */}
+                    <Text style={modalStyles.label}>Label (Optional)</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                        <TouchableOpacity
+                            style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                            onPress={() => setLabel('none')}
+                        >
+                            <Text style={modalStyles.labelChipText}>None</Text>
+                        </TouchableOpacity>
+                        {DEFAULT_LABELS.filter((l: any) => l.id !== 'none').map((l: any) => (
+                            <TouchableOpacity
+                                key={l.id}
+                                style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                onPress={() => setLabel(l.id)}
+                            >
+                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
@@ -537,7 +651,10 @@ const modalStyles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         paddingTop: spacing.sm,
         paddingBottom: spacing.xxl,
-        maxHeight: '70%',
+        maxHeight: '80%',
+    },
+    scrollContent: {
+        flexGrow: 0,
     },
     handle: {
         width: 40,
@@ -638,5 +755,61 @@ const modalStyles = StyleSheet.create({
     },
     buttonDisabled: {
         opacity: 0.5,
+    },
+    dateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        gap: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    dateButtonText: {
+        fontSize: fontSizes.body,
+        color: colors.textSecondary,
+    },
+    datePickerContainer: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        marginBottom: spacing.md,
+    },
+    datePickerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+    },
+    datePickerClear: {
+        fontSize: fontSizes.body,
+        color: colors.error,
+    },
+    datePickerDone: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
+        fontWeight: '500' as const,
+    },
+    labelPicker: {
+        marginBottom: spacing.md,
+    },
+    labelChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginRight: spacing.sm,
+        gap: spacing.xs,
+    },
+    labelColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    labelChipText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textPrimary,
     },
 });

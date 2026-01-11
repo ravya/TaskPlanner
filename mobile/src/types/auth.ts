@@ -13,7 +13,7 @@ export interface AuthState {
 }
 
 export interface UserSettings {
-    startOfWeek: 'sunday' | 'monday';
+    startOfWeek: 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
     defaultMode: 'personal' | 'professional';
     notifications: {
         enabled: boolean;

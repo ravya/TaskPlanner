@@ -1,17 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSizes } from '../styles/theme';
 
 interface EmptyStateProps {
-    icon?: string;
+    icon?: keyof typeof Ionicons.glyphMap;
     title: string;
     subtitle?: string;
 }
 
-export function EmptyState({ icon = '📝', title, subtitle }: EmptyStateProps) {
+export function EmptyState({ icon = 'document-text-outline', title, subtitle }: EmptyStateProps) {
     return (
         <View style={styles.container}>
-            <Text style={styles.icon}>{icon}</Text>
+            <Ionicons name={icon} size={48} color={colors.textTertiary} style={styles.icon} />
             <Text style={styles.title}>{title}</Text>
             {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
@@ -35,7 +36,6 @@ const styles = StyleSheet.create({
         padding: spacing.xl,
     },
     icon: {
-        fontSize: 48,
         marginBottom: spacing.md,
     },
     title: {

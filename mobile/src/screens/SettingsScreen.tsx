@@ -76,42 +76,29 @@ export function SettingsScreen() {
                 <Text style={styles.sectionTitle}>Preferences</Text>
                 <View style={styles.card}>
                     {/* Start of Week */}
-                    <View style={styles.settingRow}>
+                    <View style={styles.settingRowVertical}>
                         <Text style={styles.settingLabel}>Start of week</Text>
-                        <View style={styles.segmentControl}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.segment,
-                                    settings.startOfWeek === 'sunday' && styles.segmentActive,
-                                ]}
-                                onPress={() => updateSettings({ startOfWeek: 'sunday' })}
-                            >
-                                <Text
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayScroller}>
+                            {(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const).map((day) => (
+                                <TouchableOpacity
+                                    key={day}
                                     style={[
-                                        styles.segmentText,
-                                        settings.startOfWeek === 'sunday' && styles.segmentTextActive,
+                                        styles.dayChip,
+                                        settings.startOfWeek === day && styles.dayChipActive,
                                     ]}
+                                    onPress={() => updateSettings({ startOfWeek: day })}
                                 >
-                                    Sun
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.segment,
-                                    settings.startOfWeek === 'monday' && styles.segmentActive,
-                                ]}
-                                onPress={() => updateSettings({ startOfWeek: 'monday' })}
-                            >
-                                <Text
-                                    style={[
-                                        styles.segmentText,
-                                        settings.startOfWeek === 'monday' && styles.segmentTextActive,
-                                    ]}
-                                >
-                                    Mon
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+                                    <Text
+                                        style={[
+                                            styles.dayText,
+                                            settings.startOfWeek === day && styles.dayTextActive,
+                                        ]}
+                                    >
+                                        {day.charAt(0).toUpperCase() + day.slice(1, 3)}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </View>
 
                     <View style={styles.divider} />
@@ -357,5 +344,29 @@ const styles = StyleSheet.create({
         color: colors.textTertiary,
         textAlign: 'center',
         marginTop: spacing.lg,
+    },
+    settingRowVertical: {
+        paddingVertical: spacing.xs,
+    },
+    dayScroller: {
+        marginTop: spacing.sm,
+    },
+    dayChip: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surfaceSecondary,
+        marginRight: spacing.sm,
+    },
+    dayChipActive: {
+        backgroundColor: colors.primary,
+    },
+    dayText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    dayTextActive: {
+        color: colors.textInverse,
+        fontWeight: '600' as const,
     },
 });

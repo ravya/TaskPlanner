@@ -32,9 +32,9 @@ export const colors = {
     priorityMedium: '#F59E0B',
     priorityHigh: '#EF4444',
 
-    // Mode colors
-    modePersonal: '#8B5CF6',
-    modeProfessional: '#3B82F6',
+    // Mode colors (non-blue for distinction from primary)
+    modePersonal: '#8B5CF6',    // Purple for Home
+    modeProfessional: '#0D9488', // Teal for Work
 
     // Misc
     overlay: 'rgba(0, 0, 0, 0.5)',

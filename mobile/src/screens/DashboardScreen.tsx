@@ -14,16 +14,21 @@ import {
     ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTodayTasks, useAuth, useProjects } from '../hooks';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { AddTaskModal } from '../components/AddTaskModal';
+import { EditTaskModal } from '../components/EditTaskModal';
+import { useTodayTasks, useAuth, useProjects, useSettings } from '../hooks';
 import { TaskCard } from '../components/TaskCard';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
-import { toggleTaskComplete, bulkToggleComplete, createTask, updateTask } from '../services/firebase';
+import { toggleTaskComplete, bulkToggleComplete, deleteTask, updateTask } from '../services/firebase';
 import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
 export function DashboardScreen() {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
+    const { settings } = useSettings();
     const { tasks, loading, refresh } = useTodayTasks(user?.uid);
     const { projects } = useProjects(user?.uid);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -85,6 +90,32 @@ export function DashboardScreen() {
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
     }, []);
+
+    const handleBulkDelete = useCallback(async () => {
+        if (!user || selectedIds.size === 0) return;
+        Alert.alert(
+            'Delete Tasks',
+            `Are you sure you want to delete ${selectedIds.size} task(s)?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await Promise.all(
+                                Array.from(selectedIds).map(id => deleteTask(user.uid, id))
+                            );
+                            setSelectedIds(new Set());
+                            refresh();
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to delete tasks');
+                        }
+                    },
+                },
+            ]
+        );
+    }, [user, selectedIds, refresh]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -149,10 +180,13 @@ export function DashboardScreen() {
                     <Text style={styles.toolbarText}>{selectedIds.size}</Text>
                     <View style={styles.toolbarActions}>
                         <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkComplete}>
-                            <Text style={styles.toolbarIcon}>✓</Text>
+                            <Ionicons name="checkmark" size={20} color={colors.success} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.toolbarIconBtn} onPress={handleBulkDelete}>
+                            <Ionicons name="trash-outline" size={20} color={colors.error} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.toolbarIconBtn} onPress={clearSelection}>
-                            <Text style={styles.toolbarIcon}>✕</Text>
+                            <Ionicons name="close" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -175,7 +209,7 @@ export function DashboardScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <EmptyState
-                        icon="☆"
+                        icon="today-outline"
                         title="No tasks for today"
                         subtitle="Tap + Add to create a task"
                     />
@@ -186,7 +220,9 @@ export function DashboardScreen() {
             <AddTaskModal
                 visible={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                userId={user?.uid}
+                userId={user?.uid || null}
+                projects={projects}
+                defaultMode={settings.defaultMode === 'personal' ? 'home' : 'work'}
             />
 
             {/* Edit Task Modal */}
@@ -195,270 +231,17 @@ export function DashboardScreen() {
                     visible={!!editingTask}
                     task={editingTask}
                     onClose={() => setEditingTask(null)}
-                    userId={user?.uid}
+                    userId={user?.uid || null}
+                    projects={projects}
                 />
             )}
         </View>
     );
 }
 
-// Enhanced Add Task Modal with icons
-function AddTaskModal({
-    visible,
-    onClose,
-    userId,
-}: {
-    visible: boolean;
-    onClose: () => void;
-    userId?: string;
-}) {
-    const [title, setTitle] = useState('');
-    const [mode, setMode] = useState<TaskMode>('home');
-    const [label, setLabel] = useState<TaskLabel>('none');
-    const [showLabelPicker, setShowLabelPicker] = useState(false);
-    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async () => {
-        if (!userId || !title.trim()) return;
 
-        try {
-            setLoading(true);
-            await createTask(userId, {
-                title: title.trim(),
-                mode,
-                label,
-                dueDate: new Date(),
-            });
-            setTitle('');
-            setLabel('none');
-            onClose();
-        } catch (error) {
-            Alert.alert('Error', 'Failed to create task');
-        } finally {
-            setLoading(false);
-        }
-    };
 
-    const handleClose = () => {
-        setTitle('');
-        setLabel('none');
-        onClose();
-    };
-
-    const selectedLabel = DEFAULT_LABELS.find((l) => l.id === label);
-
-    return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <KeyboardAvoidingView
-                style={modalStyles.overlay}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
-                <View style={modalStyles.container}>
-                    <View style={modalStyles.handle} />
-
-                    <TextInput
-                        style={modalStyles.input}
-                        placeholder="What needs to be done?"
-                        placeholderTextColor={colors.textTertiary}
-                        value={title}
-                        onChangeText={setTitle}
-                        autoFocus
-                        returnKeyType="done"
-                        onSubmitEditing={handleSubmit}
-                    />
-
-                    {/* Icon toolbar */}
-                    <View style={modalStyles.iconToolbar}>
-                        <TouchableOpacity
-                            style={modalStyles.toolbarItem}
-                            onPress={() => setShowLabelPicker(!showLabelPicker)}
-                        >
-                            <Text style={modalStyles.toolbarIcon}>🏷️</Text>
-                            {label !== 'none' && (
-                                <View style={[modalStyles.labelDot, { backgroundColor: selectedLabel?.color }]} />
-                            )}
-                        </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>📅</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>🔄</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={modalStyles.toolbarItem}>
-                            <Text style={modalStyles.toolbarIcon}>☑️</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Label picker */}
-                    {showLabelPicker && (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
-                            {DEFAULT_LABELS.map((l) => (
-                                <TouchableOpacity
-                                    key={l.id}
-                                    style={[
-                                        modalStyles.labelChip,
-                                        { borderColor: l.color },
-                                        label === l.id && { backgroundColor: l.color + '20' },
-                                    ]}
-                                    onPress={() => {
-                                        setLabel(l.id);
-                                        setShowLabelPicker(false);
-                                    }}
-                                >
-                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
-                                    <Text style={modalStyles.labelText}>{l.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    )}
-
-                    <View style={modalStyles.row}>
-                        <View style={modalStyles.modeToggle}>
-                            <TouchableOpacity
-                                style={[
-                                    modalStyles.modeButton,
-                                    mode === 'home' && modalStyles.modeButtonActive,
-                                ]}
-                                onPress={() => setMode('home')}
-                            >
-                                <Text style={[
-                                    modalStyles.modeText,
-                                    mode === 'home' && modalStyles.modeTextActive,
-                                ]}>Home</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    modalStyles.modeButton,
-                                    mode === 'work' && modalStyles.modeButtonActive,
-                                ]}
-                                onPress={() => setMode('work')}
-                            >
-                                <Text style={[
-                                    modalStyles.modeText,
-                                    mode === 'work' && modalStyles.modeTextActive,
-                                ]}>Work</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity
-                            style={[modalStyles.submitButton, (!title.trim() || loading) && modalStyles.submitDisabled]}
-                            onPress={handleSubmit}
-                            disabled={!title.trim() || loading}
-                        >
-                            <Text style={modalStyles.submitText}>Add</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
-        </Modal>
-    );
-}
-
-// Edit Task Modal
-function EditTaskModal({
-    visible,
-    task,
-    onClose,
-    userId,
-}: {
-    visible: boolean;
-    task: Task;
-    onClose: () => void;
-    userId?: string;
-}) {
-    const [title, setTitle] = useState(task.title);
-    const [mode, setMode] = useState<TaskMode>(task.mode);
-    const [label, setLabel] = useState<TaskLabel>((task as any).label || 'none');
-    const [loading, setLoading] = useState(false);
-
-    const handleSave = async () => {
-        if (!userId || !title.trim()) return;
-
-        try {
-            setLoading(true);
-            await updateTask(userId, task.id, {
-                title: title.trim(),
-                mode,
-                label,
-            } as any);
-            onClose();
-        } catch (error) {
-            Alert.alert('Error', 'Failed to update task');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <KeyboardAvoidingView
-                style={modalStyles.overlay}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
-                <View style={modalStyles.container}>
-                    <View style={modalStyles.handle} />
-                    <Text style={modalStyles.title}>Edit Task</Text>
-
-                    <TextInput
-                        style={modalStyles.input}
-                        value={title}
-                        onChangeText={setTitle}
-                        autoFocus
-                    />
-
-                    <Text style={modalStyles.sectionLabel}>Label</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
-                        {DEFAULT_LABELS.map((l) => (
-                            <TouchableOpacity
-                                key={l.id}
-                                style={[
-                                    modalStyles.labelChip,
-                                    { borderColor: l.color },
-                                    label === l.id && { backgroundColor: l.color + '20' },
-                                ]}
-                                onPress={() => setLabel(l.id)}
-                            >
-                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
-                                <Text style={modalStyles.labelText}>{l.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-
-                    <Text style={modalStyles.sectionLabel}>Mode</Text>
-                    <View style={modalStyles.modeToggle}>
-                        <TouchableOpacity
-                            style={[modalStyles.modeButton, mode === 'home' && modalStyles.modeButtonActive]}
-                            onPress={() => setMode('home')}
-                        >
-                            <Text style={[modalStyles.modeText, mode === 'home' && modalStyles.modeTextActive]}>Home</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[modalStyles.modeButton, mode === 'work' && modalStyles.modeButtonActive]}
-                            onPress={() => setMode('work')}
-                        >
-                            <Text style={[modalStyles.modeText, mode === 'work' && modalStyles.modeTextActive]}>Work</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={modalStyles.actions}>
-                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
-                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[modalStyles.submitButton, loading && modalStyles.submitDisabled]}
-                            onPress={handleSave}
-                            disabled={loading}
-                        >
-                            <Text style={modalStyles.submitText}>Save</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
-        </Modal>
-    );
-}
 
 const styles = StyleSheet.create({
     container: {
@@ -542,28 +325,32 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: colors.primary,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.md,
+        marginHorizontal: spacing.md,
+        marginVertical: spacing.sm,
+        borderRadius: borderRadius.lg,
     },
     toolbarText: {
         fontSize: fontSizes.h3,
         color: colors.textInverse,
         fontWeight: '700' as const,
+        marginLeft: spacing.xs,
     },
     toolbarActions: {
         flexDirection: 'row',
-        gap: spacing.md,
+        gap: spacing.sm,
     },
     toolbarIconBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: 'rgba(255,255,255,0.2)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     toolbarIcon: {
-        fontSize: 18,
+        fontSize: 20,
         color: colors.textInverse,
     },
     listContent: {
@@ -572,147 +359,4 @@ const styles = StyleSheet.create({
     },
 });
 
-const modalStyles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-    },
-    backdrop: {
-        flex: 1,
-        backgroundColor: colors.overlay,
-    },
-    container: {
-        backgroundColor: colors.surface,
-        borderTopLeftRadius: borderRadius.xl,
-        borderTopRightRadius: borderRadius.xl,
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.sm,
-        paddingBottom: spacing.xl + 20,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        backgroundColor: colors.border,
-        borderRadius: 2,
-        alignSelf: 'center',
-        marginBottom: spacing.md,
-    },
-    title: {
-        fontSize: fontSizes.h3,
-        fontWeight: '600' as const,
-        color: colors.textPrimary,
-        marginBottom: spacing.md,
-    },
-    input: {
-        fontSize: fontSizes.body,
-        color: colors.textPrimary,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    iconToolbar: {
-        flexDirection: 'row',
-        paddingVertical: spacing.md,
-        gap: spacing.lg,
-    },
-    toolbarItem: {
-        position: 'relative',
-    },
-    toolbarIcon: {
-        fontSize: 24,
-    },
-    labelDot: {
-        position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    labelPicker: {
-        marginBottom: spacing.md,
-    },
-    labelChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.full,
-        borderWidth: 1,
-        marginRight: spacing.sm,
-        gap: spacing.xs,
-    },
-    labelColorDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-    },
-    labelText: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textPrimary,
-    },
-    sectionLabel: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textSecondary,
-        marginTop: spacing.md,
-        marginBottom: spacing.xs,
-    },
-    row: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: spacing.md,
-    },
-    modeToggle: {
-        flexDirection: 'row',
-        backgroundColor: colors.surfaceSecondary,
-        borderRadius: borderRadius.md,
-        padding: 2,
-    },
-    modeButton: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.sm,
-    },
-    modeButtonActive: {
-        backgroundColor: colors.surface,
-    },
-    modeText: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textSecondary,
-    },
-    modeTextActive: {
-        color: colors.textPrimary,
-        fontWeight: '500' as const,
-    },
-    submitButton: {
-        backgroundColor: colors.primary,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
-        borderRadius: borderRadius.md,
-    },
-    submitDisabled: {
-        opacity: 0.5,
-    },
-    submitText: {
-        fontSize: fontSizes.body,
-        color: colors.textInverse,
-        fontWeight: '600' as const,
-    },
-    actions: {
-        flexDirection: 'row',
-        gap: spacing.md,
-        marginTop: spacing.lg,
-    },
-    cancelButton: {
-        flex: 1,
-        paddingVertical: spacing.md,
-        alignItems: 'center',
-        borderRadius: borderRadius.md,
-        backgroundColor: colors.surfaceSecondary,
-    },
-    cancelButtonText: {
-        fontSize: fontSizes.body,
-        color: colors.textSecondary,
-    },
-});
+

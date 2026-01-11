@@ -9,10 +9,38 @@ import {
 import { auth } from './config';
 import { User } from '../../types';
 
+// Map Firebase error codes to user-friendly messages
+function getAuthErrorMessage(errorCode: string): string {
+    switch (errorCode) {
+        case 'auth/user-not-found':
+            return 'No account found with this email. Please sign up first.';
+        case 'auth/wrong-password':
+            return 'Incorrect password. Please try again.';
+        case 'auth/invalid-credential':
+            return 'No account found with this email. Please sign up first.';
+        case 'auth/invalid-email':
+            return 'Please enter a valid email address.';
+        case 'auth/user-disabled':
+            return 'This account has been disabled. Contact support.';
+        case 'auth/too-many-requests':
+            return 'Too many failed attempts. Please try again later.';
+        case 'auth/email-already-in-use':
+            return 'An account with this email already exists. Please login.';
+        case 'auth/weak-password':
+            return 'Password is too weak. Use at least 6 characters.';
+        default:
+            return 'Something went wrong. Please try again.';
+    }
+}
+
 // Sign in with email and password
 export async function signIn(email: string, password: string): Promise<User> {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return mapFirebaseUser(userCredential.user);
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        return mapFirebaseUser(userCredential.user);
+    } catch (error: any) {
+        throw new Error(getAuthErrorMessage(error.code));
+    }
 }
 
 // Create new account
@@ -21,13 +49,17 @@ export async function signUp(
     password: string,
     displayName?: string
 ): Promise<User> {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-    if (displayName) {
-        await updateProfile(userCredential.user, { displayName });
+        if (displayName) {
+            await updateProfile(userCredential.user, { displayName });
+        }
+
+        return mapFirebaseUser(userCredential.user);
+    } catch (error: any) {
+        throw new Error(getAuthErrorMessage(error.code));
     }
-
-    return mapFirebaseUser(userCredential.user);
 }
 
 // Sign out

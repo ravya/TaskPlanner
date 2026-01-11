@@ -11,6 +11,7 @@ import {
     ScrollView,
     useWindowDimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { signUp, useGoogleAuth } from '../../services/firebase';
 
@@ -205,7 +206,11 @@ export function RegisterScreen({ onNavigateToLogin }: RegisterScreenProps) {
                                 style={styles.eyeButton}
                                 onPress={() => setShowPassword(!showPassword)}
                             >
-                                <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                <Ionicons
+                                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                    size={22}
+                                    color={colors.textSecondary}
+                                />
                             </TouchableOpacity>
                         </View>
 
@@ -228,7 +233,11 @@ export function RegisterScreen({ onNavigateToLogin }: RegisterScreenProps) {
                                     style={styles.eyeButton}
                                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                                 >
-                                    <Text style={styles.eyeIcon}>{showConfirmPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                    <Ionicons
+                                        name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                                        size={22}
+                                        color={colors.textSecondary}
+                                    />
                                 </TouchableOpacity>
                             </View>
                             {passwordError && (

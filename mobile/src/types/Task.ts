@@ -24,7 +24,8 @@ export interface Task {
     title: string;
     description?: string;
     status: TaskStatus;
-    label: TaskLabel;
+    label: TaskLabel; // Keeping for backward compatibility
+    labels: TaskLabel[];
     mode: TaskMode;
     tags: string[];
     dueDate: string; // YYYY-MM-DD format
@@ -47,6 +48,7 @@ export interface TaskFormData {
     title: string;
     description?: string;
     label?: TaskLabel;
+    labels?: TaskLabel[];
     mode: TaskMode;
     tags?: string[];
     dueDate?: Date | string;

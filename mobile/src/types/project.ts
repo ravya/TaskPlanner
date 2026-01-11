@@ -25,6 +25,44 @@ export interface ProjectFormData {
     description?: string;
     mode: ProjectMode;
     icon?: string;
+    deadline?: Date;
+    label?: string;
 }
 
-export const PROJECT_ICONS = ['📁', '🏠', '💼', '🎯', '📚', '💡', '🚀', '⭐', '📥'];
+// Ionicons names for project icons
+export const PROJECT_ICONS = [
+    'folder',
+    'home',
+    'briefcase',
+    'flag',
+    'book',
+    'bulb',
+    'rocket',
+    'star',
+    'archive'
+];
+
+// Map old emoji icons to Ionicons (for backward compatibility)
+const EMOJI_TO_IONICON: Record<string, string> = {
+    '📁': 'folder',
+    '🏠': 'home',
+    '💼': 'briefcase',
+    '🎯': 'flag',
+    '📚': 'book',
+    '💡': 'bulb',
+    '🚀': 'rocket',
+    '⭐': 'star',
+    '📥': 'archive',
+    '📂': 'folder-open',
+};
+
+// Get valid Ionicon name from project icon (handles legacy emojis)
+export function getProjectIconName(icon?: string): string {
+    if (!icon) return 'folder';
+    // If it's already an Ionicon name
+    if (PROJECT_ICONS.includes(icon)) return icon;
+    // If it's a legacy emoji, map it
+    if (EMOJI_TO_IONICON[icon]) return EMOJI_TO_IONICON[icon];
+    // Fallback
+    return 'folder';
+}

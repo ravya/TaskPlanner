@@ -371,6 +371,9 @@ function EditProjectModal({
     const [name, setName] = useState(project.name);
     const [mode, setMode] = useState<ProjectMode>(project.mode);
     const [selectedIcon, setSelectedIcon] = useState(project.icon || PROJECT_ICONS[0]);
+    const [deadline, setDeadline] = useState<Date | null>((project as any).deadline || null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [label, setLabel] = useState<TaskLabel>((project as any).label || 'none');
     const [loading, setLoading] = useState(false);
 
     const handleSave = async () => {
@@ -382,6 +385,8 @@ function EditProjectModal({
                 name: name.trim(),
                 mode,
                 icon: selectedIcon,
+                deadline: deadline || undefined,
+                label: label !== 'none' ? label : undefined,
             });
             onClose();
         } catch (error) {
@@ -423,6 +428,68 @@ function EditProjectModal({
                             </TouchableOpacity>
                         ))}
                     </View>
+
+                    {/* Deadline */}
+                    <Text style={modalStyles.label}>Deadline (Optional)</Text>
+                    <TouchableOpacity
+                        style={modalStyles.dateButton}
+                        onPress={() => setShowDatePicker(!showDatePicker)}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
+                        <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
+                            {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <View style={modalStyles.datePickerContainer}>
+                            <DateTimePicker
+                                value={deadline || new Date()}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={(event, selectedDate) => {
+                                    if (Platform.OS === 'android') {
+                                        setShowDatePicker(false);
+                                    }
+                                    if (selectedDate) {
+                                        setDeadline(selectedDate);
+                                    }
+                                }}
+                                minimumDate={new Date()}
+                            />
+                            {Platform.OS === 'ios' && (
+                                <View style={modalStyles.datePickerActions}>
+                                    <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
+                                        <Text style={modalStyles.datePickerClear}>Clear</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                        <Text style={modalStyles.datePickerDone}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Label */}
+                    <Text style={modalStyles.label}>Label (Optional)</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                        <TouchableOpacity
+                            style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                            onPress={() => setLabel('none')}
+                        >
+                            <Text style={modalStyles.labelChipText}>None</Text>
+                        </TouchableOpacity>
+                        {DEFAULT_LABELS.filter((l: any) => l.id !== 'none').map((l: any) => (
+                            <TouchableOpacity
+                                key={l.id}
+                                style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                onPress={() => setLabel(l.id)}
+                            >
+                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
 
                     <View style={modalStyles.actions}>
                         <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>

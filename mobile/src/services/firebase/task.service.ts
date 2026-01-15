@@ -8,9 +8,11 @@ import {
     where,
     onSnapshot,
     writeBatch,
+    getDoc,
 } from 'firebase/firestore';
 import { db } from './config';
 import { Task, TaskFormData, TaskMode, TaskLabel } from '../../types';
+import { adjustProjectTaskCounts } from './project.service';
 
 const TASKS_COLLECTION = 'tasks';
 
@@ -19,16 +21,18 @@ function getUserTasksRef(userId: string) {
     return collection(db, 'users', userId, TASKS_COLLECTION);
 }
 
-// Format date to YYYY-MM-DD (UTC)
+// Format date to YYYY-MM-DD (Local)
 function formatDate(date: Date | string): string {
     if (typeof date === 'string') {
-        // If already a string, ensure it's in YYYY-MM-DD format
         if (date.includes('T')) {
             return date.split('T')[0];
         }
         return date;
     }
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // === TIMEZONE UTILITIES ===
@@ -51,11 +55,12 @@ function utcToLocalDateString(utcDateString: string): string {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-// Check if a UTC date string matches today's local date
-function isToday(utcDateString: string): boolean {
-    const taskLocalDate = utcToLocalDateString(utcDateString);
-    const todayLocal = getTodayLocal();
-    return taskLocalDate === todayLocal;
+// Check if a local date string (YYYY-MM-DD) matches today's local date
+function isToday(dateString: string): boolean {
+    if (dateString.includes('T')) {
+        return dateString.split('T')[0] === getTodayLocal();
+    }
+    return dateString === getTodayLocal();
 }
 
 // Get tasks for a user
@@ -122,6 +127,7 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
         mode: data.mode || 'home',
         tags: data.tags || [],
         dueDate: dueDate,
+        deadlineDate: data.deadlineDate || null,
         startTime: data.startTime || null,
         isRepeating: data.isRepeating || false,
         repeatFrequency: data.repeatFrequency || null,
@@ -138,6 +144,12 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
     };
 
     const docRef = await addDoc(tasksRef, taskData);
+
+    // Update project count
+    if (taskData.projectId) {
+        await adjustProjectTaskCounts(userId, taskData.projectId, 1, 0);
+    }
+
     return { id: docRef.id, ...taskData } as Task;
 }
 
@@ -148,10 +160,35 @@ export async function updateTask(
     updates: Partial<Task>
 ): Promise<void> {
     const taskRef = doc(db, 'users', userId, TASKS_COLLECTION, taskId);
+
+    // Get old task data to check if project or completion status changed
+    const taskSnap = await getDoc(taskRef);
+    if (!taskSnap.exists()) return;
+    const oldTask = taskSnap.data() as Task;
+
     await updateDoc(taskRef, {
         ...updates,
         updatedAt: new Date().toISOString(),
     });
+
+    // Handle project change or completion change in updateTask
+    const projectChanged = updates.projectId !== undefined && updates.projectId !== oldTask.projectId;
+    const completionChanged = updates.completed !== undefined && updates.completed !== oldTask.completed;
+
+    if (projectChanged) {
+        // Decrement old project
+        if (oldTask.projectId) {
+            await adjustProjectTaskCounts(userId, oldTask.projectId, -1, oldTask.completed ? -1 : 0);
+        }
+        // Increment new project
+        if (updates.projectId) {
+            const isNowCompleted = updates.completed !== undefined ? updates.completed : oldTask.completed;
+            await adjustProjectTaskCounts(userId, updates.projectId, 1, isNowCompleted ? 1 : 0);
+        }
+    } else if (completionChanged && oldTask.projectId) {
+        // Project didn't change, but completion did
+        await adjustProjectTaskCounts(userId, oldTask.projectId, 0, updates.completed ? 1 : -1);
+    }
 }
 
 // Toggle task completion
@@ -164,7 +201,20 @@ export async function toggleTaskComplete(userId: string, taskId: string, complet
 
 // Delete task (soft delete)
 export async function deleteTask(userId: string, taskId: string): Promise<void> {
+    const taskRef = doc(db, 'users', userId, TASKS_COLLECTION, taskId);
+    const taskSnap = await getDoc(taskRef);
+    const taskData = taskSnap.exists() ? taskSnap.data() as Task : null;
+
     await updateTask(userId, taskId, { isDeleted: true });
+
+    if (taskData?.projectId && !taskData.isDeleted) {
+        await adjustProjectTaskCounts(
+            userId,
+            taskData.projectId,
+            -1,
+            taskData.completed ? -1 : 0
+        );
+    }
 }
 
 // Bulk toggle complete
@@ -174,16 +224,27 @@ export async function bulkToggleComplete(
     completed: boolean
 ): Promise<void> {
     const batch = writeBatch(db);
+    const now = new Date().toISOString();
     const updates = {
         completed,
         status: completed ? 'completed' : 'todo',
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
     };
 
-    taskIds.forEach((taskId) => {
+    // We need to update project counts for each task
+    for (const taskId of taskIds) {
         const taskRef = doc(db, 'users', userId, TASKS_COLLECTION, taskId);
-        batch.update(taskRef, updates);
-    });
+        const taskSnap = await getDoc(taskRef);
+        if (taskSnap.exists()) {
+            const taskData = taskSnap.data() as Task;
+            batch.update(taskRef, updates);
+
+            // Only adjust if completion status is actually changing
+            if (taskData.projectId && taskData.completed !== completed) {
+                await adjustProjectTaskCounts(userId, taskData.projectId, 0, completed ? 1 : -1);
+            }
+        }
+    }
 
     await batch.commit();
 }
@@ -228,7 +289,8 @@ export function subscribeToTodayTasks(
     return subscribeToTasks(userId, (allTasks) => {
         const todayTasks = allTasks.filter((t) => {
             const taskDate = (t as any).dueDate || (t as any).startDate;
-            return taskDate && isToday(taskDate);
+            // Verify if task matches today's local date
+            return taskDate && isToday(taskDate) && !t.isDeleted;
         });
         callback(todayTasks);
     });

@@ -32,7 +32,7 @@ export function DashboardScreen() {
     const { tasks, loading, refresh } = useTodayTasks(user?.uid);
     const { projects } = useProjects(user?.uid);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
+    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>(settings.defaultMode === 'personal' ? 'home' : (settings.defaultMode === 'professional' ? 'work' : 'all'));
     const [refreshing, setRefreshing] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);

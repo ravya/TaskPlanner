@@ -29,6 +29,7 @@ export interface Task {
     mode: TaskMode;
     tags: string[];
     dueDate: string; // YYYY-MM-DD format
+    deadlineDate?: string; // Flag icon (Deadline)
     startTime?: string;
     completed: boolean;
     isRepeating: boolean;
@@ -52,6 +53,7 @@ export interface TaskFormData {
     mode: TaskMode;
     tags?: string[];
     dueDate?: Date | string;
+    deadlineDate?: string;
     startTime?: string;
     isRepeating?: boolean;
     repeatFrequency?: 'daily' | 'weekly' | 'monthly';

@@ -58,13 +58,15 @@ export function SettingsScreen() {
             {/* Labels Section */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Labels</Text>
-                <View style={styles.card}>
-                    {DEFAULT_LABELS.filter(l => l.id !== 'none').map((label) => (
-                        <View key={label.id} style={styles.labelRow}>
-                            <View style={[styles.labelDot, { backgroundColor: label.color }]} />
-                            <Text style={styles.labelName}>{label.name}</Text>
-                        </View>
-                    ))}
+                <View style={[styles.card, styles.labelsCard]}>
+                    <ScrollView style={styles.labelsList} nestedScrollEnabled>
+                        {DEFAULT_LABELS.filter(l => l.id !== 'none').map((label) => (
+                            <View key={label.id} style={styles.labelRow}>
+                                <View style={[styles.labelDot, { backgroundColor: label.color }]} />
+                                <Text style={styles.labelName}>{label.name}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
                     <TouchableOpacity style={styles.addLabelButton}>
                         <Text style={styles.addLabelText}>+ Add Custom Label</Text>
                     </TouchableOpacity>
@@ -76,8 +78,10 @@ export function SettingsScreen() {
                 <Text style={styles.sectionTitle}>Preferences</Text>
                 <View style={styles.card}>
                     {/* Start of Week */}
-                    <View style={styles.settingRowVertical}>
-                        <Text style={styles.settingLabel}>Start of week</Text>
+                    <View style={styles.settingRow}>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.settingLabel}>Start of week</Text>
+                        </View>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayScroller}>
                             {(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const).map((day) => (
                                 <TouchableOpacity
@@ -105,7 +109,9 @@ export function SettingsScreen() {
 
                     {/* Default Mode */}
                     <View style={styles.settingRow}>
-                        <Text style={styles.settingLabel}>Default mode</Text>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.settingLabel}>Default mode</Text>
+                        </View>
                         <View style={styles.segmentControl}>
                             <TouchableOpacity
                                 style={[
@@ -149,7 +155,9 @@ export function SettingsScreen() {
                 <Text style={styles.sectionTitle}>Notifications</Text>
                 <View style={styles.card}>
                     <View style={styles.settingRow}>
-                        <Text style={styles.settingLabel}>Push notifications</Text>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.settingLabel}>Push notifications</Text>
+                        </View>
                         <Switch
                             value={settings.notifications.enabled}
                             onValueChange={(enabled) =>
@@ -167,7 +175,9 @@ export function SettingsScreen() {
                 <Text style={styles.sectionTitle}>Sound</Text>
                 <View style={styles.card}>
                     <View style={styles.settingRow}>
-                        <Text style={styles.settingLabel}>Task completion</Text>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.settingLabel}>Task completion</Text>
+                        </View>
                         <Switch
                             value={settings.sound.taskComplete}
                             onValueChange={(taskComplete) =>
@@ -181,7 +191,9 @@ export function SettingsScreen() {
                     <View style={styles.divider} />
 
                     <View style={styles.settingRow}>
-                        <Text style={styles.settingLabel}>Notification sound</Text>
+                        <View style={styles.labelContainer}>
+                            <Text style={styles.settingLabel}>Notification sound</Text>
+                        </View>
                         <Switch
                             value={settings.sound.notifications}
                             onValueChange={(notifications) =>
@@ -270,7 +282,7 @@ const styles = StyleSheet.create({
     labelRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: spacing.sm,
+        paddingVertical: spacing.md,
     },
     labelDot: {
         width: 12,
@@ -292,9 +304,12 @@ const styles = StyleSheet.create({
     },
     settingRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: spacing.xs,
+        paddingVertical: spacing.sm,
+    },
+    labelContainer: {
+        width: 140,
+        marginRight: spacing.md,
     },
     settingLabel: {
         fontSize: fontSizes.body,
@@ -368,5 +383,11 @@ const styles = StyleSheet.create({
     dayTextActive: {
         color: colors.textInverse,
         fontWeight: '600' as const,
+    },
+    labelsCard: {
+        maxHeight: 250,
+    },
+    labelsList: {
+        marginBottom: spacing.xs,
     },
 });

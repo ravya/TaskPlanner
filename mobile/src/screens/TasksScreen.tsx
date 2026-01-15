@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
-    FlatList,
+    SectionList,
     TouchableOpacity,
     StyleSheet,
     RefreshControl,
@@ -24,24 +24,49 @@ import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { toggleTaskComplete, bulkToggleComplete, deleteTask, updateTask } from '../services/firebase';
 import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
-export function TasksScreen() {
+export function TasksScreen(props: any) {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { settings } = useSettings();
     const { projects } = useProjects(user?.uid);
     const { tasks, loading, refresh } = useTasks(user?.uid, { includeCompleted: true, realtime: true });
+
+    // Get project filter from navigation params
+    const route = React.useMemo(() => (props as any)?.route, [props]);
+    const routeProjectId = route?.params?.projectId;
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
+    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>(settings.defaultMode === 'personal' ? 'home' : (settings.defaultMode === 'professional' ? 'work' : 'all'));
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     const filteredTasks = tasks.filter((task) => {
+        if (routeProjectId && task.projectId !== routeProjectId) return false;
         if (modeFilter !== 'all' && task.mode !== modeFilter) return false;
         if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         return true;
     });
+
+    const groupedTasks = React.useMemo(() => {
+        const groups: { title: string; data: Task[] }[] = [];
+
+        // Add tasks with no project first
+        const noProjectTasks = filteredTasks.filter((t: Task) => !t.projectId);
+        if (noProjectTasks.length > 0) {
+            groups.push({ title: 'No Project', data: noProjectTasks });
+        }
+
+        // Group by projects
+        projects.forEach((project) => {
+            const projectTasks = filteredTasks.filter((t: Task) => t.projectId === project.id);
+            if (projectTasks.length > 0) {
+                groups.push({ title: project.name, data: projectTasks });
+            }
+        });
+
+        return groups;
+    }, [filteredTasks, projects]);
 
     const isMultiSelectMode = selectedIds.size > 0;
 
@@ -165,8 +190,8 @@ export function TasksScreen() {
             )}
 
             {/* Task List */}
-            <FlatList
-                data={filteredTasks}
+            <SectionList
+                sections={groupedTasks}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <TaskCard
@@ -176,6 +201,13 @@ export function TasksScreen() {
                         onLongPress={() => handleLongPress(item.id)}
                         onToggleComplete={() => handleToggleComplete(item)}
                     />
+                )}
+                renderSectionHeader={({ section: { title } }) => (
+                    title === 'No Project' ? null : (
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>{title}</Text>
+                        </View>
+                    )
                 )}
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -191,6 +223,7 @@ export function TasksScreen() {
                 userId={user?.uid || null}
                 projects={projects}
                 defaultMode={settings.defaultMode === 'personal' ? 'home' : 'work'}
+                initialProjectId={routeProjectId}
             />
 
             {/* Edit Task Modal */}
@@ -308,5 +341,17 @@ const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.xl,
+    },
+    sectionHeader: {
+        backgroundColor: colors.background,
+        paddingVertical: spacing.sm,
+        marginBottom: spacing.xs,
+    },
+    sectionTitle: {
+        fontSize: fontSizes.bodySmall,
+        fontWeight: '700' as const,
+        color: colors.primary,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
 });

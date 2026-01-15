@@ -9,6 +9,7 @@ import {
     where,
     orderBy,
     onSnapshot,
+    increment,
 } from 'firebase/firestore';
 import { db } from './config';
 import { Project, ProjectFormData, ProjectMode } from '../../types';
@@ -104,5 +105,20 @@ export function subscribeToProjects(
         }
 
         callback(projects.sort((a, b) => (a.position || 0) - (b.position || 0)));
+    });
+}
+
+// Adjust project task counts
+export async function adjustProjectTaskCounts(
+    userId: string,
+    projectId: string,
+    deltaTotal: number,
+    deltaCompleted: number
+): Promise<void> {
+    const projectRef = doc(db, 'users', userId, PROJECTS_COLLECTION, projectId);
+    await updateDoc(projectRef, {
+        taskCount: increment(deltaTotal),
+        completedTaskCount: increment(deltaCompleted),
+        updatedAt: new Date().toISOString(),
     });
 }

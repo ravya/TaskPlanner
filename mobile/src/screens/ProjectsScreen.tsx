@@ -14,6 +14,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useProjects, useAuth } from '../hooks';
@@ -26,6 +27,7 @@ export function ProjectsScreen() {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { projects, loading, refresh } = useProjects(user?.uid);
+    const navigation = useNavigation<any>();
     const [modeFilter, setModeFilter] = useState<ProjectMode | 'all'>('all');
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -112,7 +114,8 @@ export function ProjectsScreen() {
                 renderItem={({ item }) => (
                     <ProjectCard
                         project={item}
-                        onPress={() => setEditingProject(item)}
+                        onPress={() => navigation.navigate('Tasks', { projectId: item.id })}
+                        onEdit={() => setEditingProject(item)}
                         onArchive={() => handleArchiveProject(item)}
                         onDelete={() => handleDeleteProject(item)}
                     />
@@ -145,11 +148,13 @@ export function ProjectsScreen() {
 function ProjectCard({
     project,
     onPress,
+    onEdit,
     onArchive,
     onDelete,
 }: {
     project: Project;
     onPress: () => void;
+    onEdit: () => void;
     onArchive: () => void;
     onDelete: () => void;
 }) {
@@ -163,13 +168,18 @@ function ProjectCard({
                 <View style={cardStyles.header}>
                     <Text style={cardStyles.name} numberOfLines={1}>{project.name}</Text>
                     <View style={[cardStyles.modeBadge, {
-                        backgroundColor: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
+                        backgroundColor: project.mode === 'home' ? colors.modePersonal + '15' : colors.modeProfessional + '15'
                     }]}>
                         <Ionicons
                             name={project.mode === 'home' ? 'home' : 'briefcase'}
                             size={12}
-                            color={colors.textInverse}
+                            color={project.mode === 'home' ? colors.modePersonal : colors.modeProfessional}
                         />
+                        <Text style={[cardStyles.modeBadgeText, {
+                            color: project.mode === 'home' ? colors.modePersonal : colors.modeProfessional
+                        }]}>
+                            {project.mode === 'home' ? 'Home' : 'Work'}
+                        </Text>
                     </View>
                 </View>
                 <View style={cardStyles.meta}>
@@ -177,6 +187,9 @@ function ProjectCard({
                         {project.completedTaskCount}/{project.taskCount} tasks
                     </Text>
                     <View style={cardStyles.actions}>
+                        <TouchableOpacity onPress={onEdit} style={cardStyles.actionBtn}>
+                            <Ionicons name="create-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={onArchive} style={cardStyles.actionBtn}>
                             <Ionicons name="archive-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
@@ -194,7 +207,7 @@ function ProjectCard({
     );
 }
 
-function AddProjectModal({
+export function AddProjectModal({
     visible,
     onClose,
     userId,
@@ -207,10 +220,21 @@ function AddProjectModal({
     const [mode, setMode] = useState<ProjectMode>('home');
     const [selectedIcon, setSelectedIcon] = useState(PROJECT_ICONS[0]);
     const [deadline, setDeadline] = useState<Date | null>(null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
     const [label, setLabel] = useState<TaskLabel>('none');
-    const [showLabelPicker, setShowLabelPicker] = useState(false);
+
+    // Pickers
+    const [activeSection, setActiveSection] = useState<'mode' | 'deadline' | 'label' | 'icon' | null>(null);
     const [loading, setLoading] = useState(false);
+
+    const handleClose = () => {
+        setName('');
+        setMode('home');
+        setSelectedIcon(PROJECT_ICONS[0]);
+        setDeadline(null);
+        setLabel('none');
+        setActiveSection(null);
+        onClose();
+    };
 
     const handleSubmit = async () => {
         if (!userId || !name.trim()) return;
@@ -221,23 +245,15 @@ function AddProjectModal({
                 name: name.trim(),
                 mode,
                 icon: selectedIcon,
-                deadline: deadline || undefined,
+                deadline: deadline ? deadline.toISOString() : undefined,
                 label: label !== 'none' ? label : undefined,
             });
-            setName('');
-            setDeadline(null);
-            setLabel('none');
-            onClose();
+            handleClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to create project');
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleClose = () => {
-        setName('');
-        onClose();
     };
 
     return (
@@ -249,9 +265,8 @@ function AddProjectModal({
                 <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
                 <View style={modalStyles.container}>
                     <View style={modalStyles.handle} />
-                    <Text style={modalStyles.title}>New Project</Text>
-
-                    <ScrollView showsVerticalScrollIndicator={false} style={modalStyles.scrollContent}>
+                    <ScrollView showsVerticalScrollIndicator={false} style={modalStyles.scrollContent} keyboardShouldPersistTaps="handled">
+                        <Text style={modalStyles.title}>New Project</Text>
                         <TextInput
                             style={modalStyles.input}
                             placeholder="Project name"
@@ -261,87 +276,122 @@ function AddProjectModal({
                             autoFocus
                         />
 
-                        <Text style={modalStyles.label}>Mode</Text>
-                        <View style={modalStyles.modeRow}>
-                            {(['home', 'work'] as const).map((m) => (
-                                <TouchableOpacity
-                                    key={m}
-                                    style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
-                                    onPress={() => setMode(m)}
-                                >
-                                    <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
-                                        {m === 'home' ? 'Home' : 'Work'}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                        {/* Icon toolbar */}
+                        <View style={modalStyles.toolbar}>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'mode' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'mode' ? null : 'mode')}
+                            >
+                                <Ionicons name={mode === 'home' ? 'home' : 'briefcase'} size={20} color={activeSection === 'mode' ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'deadline' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'deadline' ? null : 'deadline')}
+                            >
+                                <Ionicons name={deadline ? "flag" : "flag-outline"} size={20} color={activeSection === 'deadline' || deadline ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'label' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'label' ? null : 'label')}
+                            >
+                                <Ionicons name={label !== 'none' ? "pricetag" : "pricetag-outline"} size={20} color={activeSection === 'label' || label !== 'none' ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'icon' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'icon' ? null : 'icon')}
+                            >
+                                <Text style={modalStyles.toolbarIconText}>{selectedIcon}</Text>
+                            </TouchableOpacity>
                         </View>
 
-                        {/* Deadline */}
-                        <Text style={modalStyles.label}>Deadline (Optional)</Text>
-                        <TouchableOpacity
-                            style={modalStyles.dateButton}
-                            onPress={() => setShowDatePicker(!showDatePicker)}
-                        >
-                            <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
-                            <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
-                                {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
-                            </Text>
-                        </TouchableOpacity>
+                        {/* Picker area */}
+                        {activeSection === 'mode' && (
+                            <View style={modalStyles.pickerArea}>
+                                <View style={modalStyles.modeRow}>
+                                    {(['home', 'work'] as const).map((m) => (
+                                        <TouchableOpacity
+                                            key={m}
+                                            style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
+                                            onPress={() => setMode(m)}
+                                        >
+                                            <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                                {m === 'home' ? 'Home' : 'Work'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
 
-                        {showDatePicker && (
-                            <View style={modalStyles.datePickerContainer}>
+                        {activeSection === 'deadline' && (
+                            <View style={modalStyles.pickerArea}>
                                 <DateTimePicker
                                     value={deadline || new Date()}
                                     mode="date"
-                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    display={Platform.OS === 'ios' ? 'compact' : 'default'}
                                     onChange={(event, selectedDate) => {
-                                        if (Platform.OS === 'android') {
-                                            setShowDatePicker(false);
-                                        }
-                                        if (selectedDate) {
-                                            setDeadline(selectedDate);
-                                        }
+                                        if (Platform.OS === 'android') setActiveSection(null);
+                                        if (selectedDate) setDeadline(selectedDate);
                                     }}
                                     minimumDate={new Date()}
+                                    textColor={colors.textPrimary}
                                 />
                                 {Platform.OS === 'ios' && (
-                                    <View style={modalStyles.datePickerActions}>
-                                        <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
-                                            <Text style={modalStyles.datePickerClear}>Clear</Text>
+                                    <View style={modalStyles.pickerActions}>
+                                        <TouchableOpacity onPress={() => { setDeadline(null); setActiveSection(null); }}>
+                                            <Text style={modalStyles.pickerClear}>Clear</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                            <Text style={modalStyles.datePickerDone}>Done</Text>
+                                        <TouchableOpacity onPress={() => setActiveSection(null)}>
+                                            <Text style={modalStyles.pickerDone}>Done</Text>
                                         </TouchableOpacity>
                                     </View>
                                 )}
                             </View>
                         )}
 
-                        {/* Label */}
-                        <Text style={modalStyles.label}>Label (Optional)</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
-                            <TouchableOpacity
-                                style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
-                                onPress={() => setLabel('none')}
-                            >
-                                <Text style={modalStyles.labelChipText}>None</Text>
-                            </TouchableOpacity>
-                            {DEFAULT_LABELS.filter(l => l.id !== 'none').map((l) => (
-                                <TouchableOpacity
-                                    key={l.id}
-                                    style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
-                                    onPress={() => setLabel(l.id)}
-                                >
-                                    <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
-                                    <Text style={modalStyles.labelChipText}>{l.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                        {activeSection === 'label' && (
+                            <View style={modalStyles.pickerArea}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                                    <TouchableOpacity
+                                        style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                                        onPress={() => setLabel('none')}
+                                    >
+                                        <Text style={modalStyles.labelChipText}>None</Text>
+                                    </TouchableOpacity>
+                                    {DEFAULT_LABELS.filter(l => l.id !== 'none').map((l) => (
+                                        <TouchableOpacity
+                                            key={l.id}
+                                            style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                            onPress={() => setLabel(l.id)}
+                                        >
+                                            <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                            <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+
+                        {activeSection === 'icon' && (
+                            <View style={modalStyles.pickerArea}>
+                                <View style={modalStyles.iconGrid}>
+                                    {PROJECT_ICONS.map((icon) => (
+                                        <TouchableOpacity
+                                            key={icon}
+                                            style={[modalStyles.iconChip, selectedIcon === icon && modalStyles.iconChipActive]}
+                                            onPress={() => setSelectedIcon(icon)}
+                                        >
+                                            <Text style={modalStyles.iconText}>{icon}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
                     </ScrollView>
 
                     <View style={modalStyles.actions}>
-                        <TouchableOpacity style={modalStyles.cancelButton} onPress={handleClose}>
-                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                        <TouchableOpacity style={[modalStyles.cancelButton, { backgroundColor: colors.error }]} onPress={handleClose}>
+                            <Text style={[modalStyles.cancelButtonText, { color: colors.textInverse, fontWeight: '600' }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[modalStyles.submitButton, (!name.trim() || loading) && modalStyles.buttonDisabled]}
@@ -371,10 +421,22 @@ function EditProjectModal({
     const [name, setName] = useState(project.name);
     const [mode, setMode] = useState<ProjectMode>(project.mode);
     const [selectedIcon, setSelectedIcon] = useState(project.icon || PROJECT_ICONS[0]);
-    const [deadline, setDeadline] = useState<Date | null>((project as any).deadline || null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [label, setLabel] = useState<TaskLabel>((project as any).label || 'none');
+    const [deadline, setDeadline] = useState<Date | null>(project.deadline ? new Date(project.deadline) : null);
+    const [label, setLabel] = useState<TaskLabel>((project.label as TaskLabel) || 'none');
+
+    const [activeSection, setActiveSection] = useState<'mode' | 'deadline' | 'label' | 'icon' | null>(null);
     const [loading, setLoading] = useState(false);
+
+    const handleClose = () => {
+        // Reset states to project's original values on close if not saved
+        setName(project.name);
+        setMode(project.mode);
+        setSelectedIcon(project.icon || PROJECT_ICONS[0]);
+        setDeadline(project.deadline ? new Date(project.deadline) : null);
+        setLabel((project.label as TaskLabel) || 'none');
+        setActiveSection(null);
+        onClose();
+    };
 
     const handleSave = async () => {
         if (!userId || !name.trim()) return;
@@ -385,7 +447,7 @@ function EditProjectModal({
                 name: name.trim(),
                 mode,
                 icon: selectedIcon,
-                deadline: deadline || undefined,
+                deadline: deadline ? deadline.toISOString() : undefined,
                 label: label !== 'none' ? label : undefined,
             });
             onClose();
@@ -402,98 +464,134 @@ function EditProjectModal({
                 style={modalStyles.overlay}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <TouchableOpacity style={modalStyles.backdrop} onPress={onClose} />
+                <TouchableOpacity style={modalStyles.backdrop} onPress={handleClose} />
                 <View style={modalStyles.container}>
                     <View style={modalStyles.handle} />
-                    <Text style={modalStyles.title}>Edit Project</Text>
+                    <ScrollView showsVerticalScrollIndicator={false} style={modalStyles.scrollContent} keyboardShouldPersistTaps="handled">
+                        <Text style={modalStyles.title}>Edit Project</Text>
+                        <TextInput
+                            style={modalStyles.input}
+                            value={name}
+                            onChangeText={setName}
+                            autoFocus
+                        />
 
-                    <TextInput
-                        style={modalStyles.input}
-                        value={name}
-                        onChangeText={setName}
-                        autoFocus
-                    />
-
-                    <Text style={modalStyles.label}>Mode</Text>
-                    <View style={modalStyles.modeRow}>
-                        {(['home', 'work'] as const).map((m) => (
+                        {/* Icon toolbar */}
+                        <View style={modalStyles.toolbar}>
                             <TouchableOpacity
-                                key={m}
-                                style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
-                                onPress={() => setMode(m)}
+                                style={[modalStyles.toolbarItem, activeSection === 'mode' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'mode' ? null : 'mode')}
                             >
-                                <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
-                                    {m === 'home' ? 'Home' : 'Work'}
-                                </Text>
+                                <Ionicons name={mode === 'home' ? 'home' : 'briefcase'} size={20} color={activeSection === 'mode' ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* Deadline */}
-                    <Text style={modalStyles.label}>Deadline (Optional)</Text>
-                    <TouchableOpacity
-                        style={modalStyles.dateButton}
-                        onPress={() => setShowDatePicker(!showDatePicker)}
-                    >
-                        <Ionicons name="calendar-outline" size={20} color={deadline ? colors.primary : colors.textSecondary} />
-                        <Text style={[modalStyles.dateButtonText, deadline && { color: colors.primary }]}>
-                            {deadline ? deadline.toLocaleDateString() : 'Set deadline'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    {showDatePicker && (
-                        <View style={modalStyles.datePickerContainer}>
-                            <DateTimePicker
-                                value={deadline || new Date()}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={(event, selectedDate) => {
-                                    if (Platform.OS === 'android') {
-                                        setShowDatePicker(false);
-                                    }
-                                    if (selectedDate) {
-                                        setDeadline(selectedDate);
-                                    }
-                                }}
-                                minimumDate={new Date()}
-                            />
-                            {Platform.OS === 'ios' && (
-                                <View style={modalStyles.datePickerActions}>
-                                    <TouchableOpacity onPress={() => { setDeadline(null); setShowDatePicker(false); }}>
-                                        <Text style={modalStyles.datePickerClear}>Clear</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                        <Text style={modalStyles.datePickerDone}>Done</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'deadline' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'deadline' ? null : 'deadline')}
+                            >
+                                <Ionicons name={deadline ? "flag" : "flag-outline"} size={20} color={activeSection === 'deadline' || deadline ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'label' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'label' ? null : 'label')}
+                            >
+                                <Ionicons name={label !== 'none' ? "pricetag" : "pricetag-outline"} size={20} color={activeSection === 'label' || label !== 'none' ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[modalStyles.toolbarItem, activeSection === 'icon' && modalStyles.toolbarItemActive]}
+                                onPress={() => setActiveSection(activeSection === 'icon' ? null : 'icon')}
+                            >
+                                <Text style={modalStyles.toolbarIconText}>{selectedIcon}</Text>
+                            </TouchableOpacity>
                         </View>
-                    )}
 
-                    {/* Label */}
-                    <Text style={modalStyles.label}>Label (Optional)</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
-                        <TouchableOpacity
-                            style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
-                            onPress={() => setLabel('none')}
-                        >
-                            <Text style={modalStyles.labelChipText}>None</Text>
-                        </TouchableOpacity>
-                        {DEFAULT_LABELS.filter((l: any) => l.id !== 'none').map((l: any) => (
-                            <TouchableOpacity
-                                key={l.id}
-                                style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
-                                onPress={() => setLabel(l.id)}
-                            >
-                                <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
-                                <Text style={modalStyles.labelChipText}>{l.name}</Text>
-                            </TouchableOpacity>
-                        ))}
+                        {/* Picker area */}
+                        {activeSection === 'mode' && (
+                            <View style={modalStyles.pickerArea}>
+                                <View style={modalStyles.modeRow}>
+                                    {(['home', 'work'] as const).map((m) => (
+                                        <TouchableOpacity
+                                            key={m}
+                                            style={[modalStyles.modeChip, mode === m && modalStyles.modeChipActive]}
+                                            onPress={() => setMode(m)}
+                                        >
+                                            <Text style={[modalStyles.modeText, mode === m && modalStyles.modeTextActive]}>
+                                                {m === 'home' ? 'Home' : 'Work'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {activeSection === 'deadline' && (
+                            <View style={modalStyles.pickerArea}>
+                                <DateTimePicker
+                                    value={deadline || new Date()}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                                    onChange={(event, selectedDate) => {
+                                        if (Platform.OS === 'android') setActiveSection(null);
+                                        if (selectedDate) setDeadline(selectedDate);
+                                    }}
+                                    minimumDate={new Date()}
+                                    textColor={colors.textPrimary}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <View style={modalStyles.pickerActions}>
+                                        <TouchableOpacity onPress={() => { setDeadline(null); setActiveSection(null); }}>
+                                            <Text style={modalStyles.pickerClear}>Clear</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => setActiveSection(null)}>
+                                            <Text style={modalStyles.pickerDone}>Done</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {activeSection === 'label' && (
+                            <View style={modalStyles.pickerArea}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={modalStyles.labelPicker}>
+                                    <TouchableOpacity
+                                        style={[modalStyles.labelChip, { borderColor: colors.border }, label === 'none' && { backgroundColor: colors.surfaceSecondary }]}
+                                        onPress={() => setLabel('none')}
+                                    >
+                                        <Text style={modalStyles.labelChipText}>None</Text>
+                                    </TouchableOpacity>
+                                    {DEFAULT_LABELS.filter(l => l.id !== 'none').map((l) => (
+                                        <TouchableOpacity
+                                            key={l.id}
+                                            style={[modalStyles.labelChip, { borderColor: l.color }, label === l.id && { backgroundColor: l.color + '20' }]}
+                                            onPress={() => setLabel(l.id)}
+                                        >
+                                            <View style={[modalStyles.labelColorDot, { backgroundColor: l.color }]} />
+                                            <Text style={modalStyles.labelChipText}>{l.name}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+
+                        {activeSection === 'icon' && (
+                            <View style={modalStyles.pickerArea}>
+                                <View style={modalStyles.iconGrid}>
+                                    {PROJECT_ICONS.map((icon) => (
+                                        <TouchableOpacity
+                                            key={icon}
+                                            style={[modalStyles.iconChip, selectedIcon === icon && modalStyles.iconChipActive]}
+                                            onPress={() => setSelectedIcon(icon)}
+                                        >
+                                            <Text style={modalStyles.iconText}>{icon}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
                     </ScrollView>
 
                     <View style={modalStyles.actions}>
-                        <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
-                            <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                        <TouchableOpacity style={[modalStyles.cancelButton, { backgroundColor: colors.error }]} onPress={handleClose}>
+                            <Text style={[modalStyles.cancelButtonText, { color: colors.textInverse, fontWeight: '600' }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[modalStyles.submitButton, loading && modalStyles.buttonDisabled]}
@@ -593,9 +691,17 @@ const cardStyles = StyleSheet.create({
         color: colors.textPrimary,
     },
     modeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingHorizontal: spacing.sm,
         paddingVertical: 2,
         borderRadius: borderRadius.sm,
+        gap: 4,
+    },
+    modeBadgeText: {
+        fontSize: 10,
+        fontWeight: '600' as const,
+        textTransform: 'capitalize',
     },
     modeText: {
         fontSize: 10,
@@ -648,13 +754,13 @@ const modalStyles = StyleSheet.create({
         backgroundColor: colors.surface,
         borderTopLeftRadius: borderRadius.xl,
         borderTopRightRadius: borderRadius.xl,
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.sm,
-        paddingBottom: spacing.xxl,
-        maxHeight: '80%',
+        paddingHorizontal: spacing.md,
+        paddingTop: spacing.xs,
+        paddingBottom: spacing.xl,
+        maxHeight: '85%',
     },
     scrollContent: {
-        flexGrow: 0,
+        flexGrow: 1,
     },
     handle: {
         width: 40,
@@ -668,52 +774,50 @@ const modalStyles = StyleSheet.create({
         fontSize: fontSizes.h3,
         fontWeight: '600' as const,
         color: colors.textPrimary,
-        marginBottom: spacing.lg,
+        marginBottom: spacing.md,
     },
     input: {
-        backgroundColor: colors.surfaceSecondary,
-        borderRadius: borderRadius.md,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-        fontSize: fontSizes.body,
+        fontSize: fontSizes.h2,
+        fontWeight: '500' as const,
         color: colors.textPrimary,
-        marginBottom: spacing.md,
+        marginBottom: spacing.lg,
+        paddingVertical: spacing.xs,
     },
-    label: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textSecondary,
-        marginBottom: spacing.xs,
+    toolbar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginBottom: spacing.lg,
     },
-    iconRow: {
-        marginBottom: spacing.md,
-    },
-    iconChip: {
-        width: 44,
-        height: 44,
+    toolbarItem: {
+        padding: spacing.sm,
         borderRadius: borderRadius.md,
         backgroundColor: colors.surfaceSecondary,
+        minWidth: 44,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: spacing.sm,
     },
-    iconChipActive: {
-        backgroundColor: colors.primaryLight,
-        borderWidth: 2,
-        borderColor: colors.primary,
+    toolbarItemActive: {
+        backgroundColor: colors.primary + '15',
     },
-    iconText: {
-        fontSize: 24,
+    toolbarIconText: {
+        fontSize: 18,
+    },
+    pickerArea: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.sm,
+        marginBottom: spacing.md,
     },
     modeRow: {
         flexDirection: 'row',
         gap: spacing.sm,
-        marginBottom: spacing.lg,
     },
     modeChip: {
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: borderRadius.md,
-        backgroundColor: colors.surfaceSecondary,
+        backgroundColor: colors.surface,
     },
     modeChipActive: {
         backgroundColor: colors.primary,
@@ -726,20 +830,77 @@ const modalStyles = StyleSheet.create({
         color: colors.textInverse,
         fontWeight: '600' as const,
     },
+    iconGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+    },
+    iconChip: {
+        width: 44,
+        height: 44,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    iconChipActive: {
+        backgroundColor: colors.primary + '15',
+        borderWidth: 2,
+        borderColor: colors.primary,
+    },
+    iconText: {
+        fontSize: 24,
+    },
+    labelPicker: {
+        flexDirection: 'row',
+    },
+    labelChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginRight: spacing.sm,
+        gap: spacing.xs,
+        backgroundColor: colors.surface,
+    },
+    labelColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    labelChipText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textPrimary,
+    },
+    pickerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+    },
+    pickerClear: {
+        fontSize: fontSizes.body,
+        color: colors.error,
+    },
+    pickerDone: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
+        fontWeight: '500' as const,
+    },
     actions: {
         flexDirection: 'row',
         gap: spacing.md,
+        marginTop: 'auto',
     },
     cancelButton: {
         flex: 1,
         paddingVertical: spacing.md,
         alignItems: 'center',
         borderRadius: borderRadius.md,
-        backgroundColor: colors.surfaceSecondary,
     },
     cancelButtonText: {
         fontSize: fontSizes.body,
-        color: colors.textSecondary,
     },
     submitButton: {
         flex: 1,
@@ -755,61 +916,5 @@ const modalStyles = StyleSheet.create({
     },
     buttonDisabled: {
         opacity: 0.5,
-    },
-    dateButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.md,
-        backgroundColor: colors.surfaceSecondary,
-        borderRadius: borderRadius.md,
-        gap: spacing.sm,
-        marginBottom: spacing.md,
-    },
-    dateButtonText: {
-        fontSize: fontSizes.body,
-        color: colors.textSecondary,
-    },
-    datePickerContainer: {
-        backgroundColor: colors.surfaceSecondary,
-        borderRadius: borderRadius.md,
-        padding: spacing.md,
-        marginBottom: spacing.md,
-    },
-    datePickerActions: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: spacing.sm,
-    },
-    datePickerClear: {
-        fontSize: fontSizes.body,
-        color: colors.error,
-    },
-    datePickerDone: {
-        fontSize: fontSizes.body,
-        color: colors.primary,
-        fontWeight: '500' as const,
-    },
-    labelPicker: {
-        marginBottom: spacing.md,
-    },
-    labelChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.full,
-        borderWidth: 1,
-        marginRight: spacing.sm,
-        gap: spacing.xs,
-    },
-    labelColorDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-    },
-    labelChipText: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textPrimary,
     },
 });

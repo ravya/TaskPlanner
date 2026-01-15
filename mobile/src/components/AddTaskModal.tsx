@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -22,7 +22,8 @@ interface AddTaskModalProps {
     onClose: () => void;
     userId: string | null;
     projects: Project[];
-    defaultMode?: TaskMode;
+    defaultMode: 'home' | 'work';
+    initialProjectId?: string | null;
 }
 
 export function AddTaskModal({
@@ -30,14 +31,18 @@ export function AddTaskModal({
     onClose,
     userId,
     projects,
-    defaultMode = 'home',
+    defaultMode,
+    initialProjectId
 }: AddTaskModalProps) {
     const [title, setTitle] = useState('');
     const [mode, setMode] = useState<TaskMode>(defaultMode);
     const [labels, setLabels] = useState<TaskLabel[]>([]);
-    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId || null);
     const [dueDate, setDueDate] = useState<Date | null>(null);
+    const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
+    const [startTime, setStartTime] = useState<Date | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [pickerMode, setPickerMode] = useState<'date' | 'time' | 'deadline'>('date');
     const [showLabelPicker, setShowLabelPicker] = useState(false);
     const [showProjectPicker, setShowProjectPicker] = useState(false);
     const [showSubtaskInput, setShowSubtaskInput] = useState(false);
@@ -50,6 +55,13 @@ export function AddTaskModal({
     const [showRepeatEndDatePicker, setShowRepeatEndDatePicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
+    useEffect(() => {
+        if (visible) {
+            setMode(defaultMode);
+            setSelectedProjectId(initialProjectId || null);
+        }
+    }, [visible, defaultMode, initialProjectId]);
+
     const handleSubmit = async () => {
         if (!userId || !title.trim()) return;
 
@@ -58,9 +70,11 @@ export function AddTaskModal({
             await createTask(userId, {
                 title: title.trim(),
                 mode,
-                label: labels[0] || 'none', // Use first label for backwards compatibility
+                label: labels[0] || 'none',
                 labels,
-                dueDate: dueDate ? dueDate.toISOString() : undefined, // Convert Date to ISO string
+                dueDate: dueDate ? dueDate.toISOString() : undefined,
+                deadlineDate: deadlineDate ? deadlineDate.toISOString() : undefined,
+                startTime: startTime ? startTime.toTimeString().split(' ')[0] : undefined,
                 projectId: selectedProjectId || undefined,
                 subtasks,
                 isRepeating,
@@ -80,12 +94,15 @@ export function AddTaskModal({
         setLabels([]);
         setSelectedProjectId(null);
         setDueDate(null);
+        setDeadlineDate(null);
+        setStartTime(null);
         setSubtasks([]);
         setNewSubtaskText('');
         setIsRepeating(false);
         setRepeatFrequency(null);
         setRepeatEndDate(null);
         setShowDatePicker(false);
+        setPickerMode('date');
         setShowLabelPicker(false);
         setShowProjectPicker(false);
         setShowSubtaskInput(false);
@@ -139,8 +156,44 @@ export function AddTaskModal({
                             onSubmitEditing={handleSubmit}
                         />
 
-                        {/* Icon toolbar - Order: Subtasks, Label, Time, Recurring, Project */}
+                        {/* Mode selection - Proper Home/Work toggle */}
+                        <View style={styles.modeSection}>
+                            {(['home', 'work'] as const).map((m) => (
+                                <TouchableOpacity
+                                    key={m}
+                                    style={[
+                                        styles.modeChip,
+                                        mode === m && { backgroundColor: m === 'home' ? colors.modePersonal : colors.modeProfessional }
+                                    ]}
+                                    onPress={() => setMode(m)}
+                                >
+                                    <Ionicons
+                                        name={m === 'home' ? (mode === m ? 'home' : 'home-outline') : (mode === m ? 'briefcase' : 'briefcase-outline')}
+                                        size={16}
+                                        color={mode === m ? colors.textInverse : colors.textSecondary}
+                                    />
+                                    <Text style={[styles.modeChipText, mode === m && styles.modeChipTextActive]}>
+                                        {m === 'home' ? 'Home' : 'Work'}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Icon toolbar - Order: Calendar, Subtasks, Project, Label, Flag, Recurring, Clock */}
                         <View style={styles.iconToolbar}>
+                            <TouchableOpacity
+                                style={[styles.toolbarItem, (showDatePicker && pickerMode === 'date') && styles.toolbarItemActive]}
+                                onPress={() => {
+                                    setPickerMode('date');
+                                    setShowDatePicker(!showDatePicker || pickerMode !== 'date');
+                                    setShowSubtaskInput(false);
+                                    setShowLabelPicker(false);
+                                    setShowRecurringPicker(false);
+                                    setShowProjectPicker(false);
+                                }}
+                            >
+                                <Ionicons name={dueDate ? "calendar" : "calendar-outline"} size={22} color={(showDatePicker && pickerMode === 'date') || dueDate ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.toolbarItem, showSubtaskInput && styles.toolbarItemActive]}
                                 onPress={() => {
@@ -155,6 +208,18 @@ export function AddTaskModal({
                                 {subtasks.length > 0 && <Text style={styles.badgeText}>{subtasks.length}</Text>}
                             </TouchableOpacity>
                             <TouchableOpacity
+                                style={[styles.toolbarItem, showProjectPicker && styles.toolbarItemActive]}
+                                onPress={() => {
+                                    setShowProjectPicker(!showProjectPicker);
+                                    setShowSubtaskInput(false);
+                                    setShowLabelPicker(false);
+                                    setShowDatePicker(false);
+                                    setShowRecurringPicker(false);
+                                }}
+                            >
+                                <Ionicons name={selectedProjectId ? "folder" : "folder-outline"} size={22} color={showProjectPicker || selectedProjectId ? colors.primary : colors.textSecondary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
                                 style={[styles.toolbarItem, showLabelPicker && styles.toolbarItemActive]}
                                 onPress={() => {
                                     setShowLabelPicker(!showLabelPicker);
@@ -164,19 +229,24 @@ export function AddTaskModal({
                                     setShowProjectPicker(false);
                                 }}
                             >
-                                <Ionicons name={labels.length > 0 ? "pricetag" : "pricetag-outline"} size={22} color={showLabelPicker ? colors.primary : (labels.length > 0 ? selectedLabelColors[0] : colors.textSecondary)} />
+                                <Ionicons
+                                    name={labels.length > 0 && !labels.includes('none') ? "pricetag" : "pricetag-outline"}
+                                    size={22}
+                                    color={showLabelPicker || (labels.length > 0 && !labels.includes('none')) ? colors.primary : colors.textSecondary}
+                                />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.toolbarItem, showDatePicker && styles.toolbarItemActive]}
+                                style={[styles.toolbarItem, (showDatePicker && pickerMode === 'deadline') && styles.toolbarItemActive]}
                                 onPress={() => {
-                                    setShowDatePicker(!showDatePicker);
+                                    setPickerMode('deadline');
+                                    setShowDatePicker(!showDatePicker || pickerMode !== 'deadline');
                                     setShowSubtaskInput(false);
                                     setShowLabelPicker(false);
                                     setShowRecurringPicker(false);
                                     setShowProjectPicker(false);
                                 }}
                             >
-                                <Ionicons name={dueDate ? "calendar" : "calendar-outline"} size={22} color={showDatePicker || dueDate ? colors.primary : colors.textSecondary} />
+                                <Ionicons name={deadlineDate ? "flag" : "flag-outline"} size={22} color={(showDatePicker && pickerMode === 'deadline') || deadlineDate ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.toolbarItem, showRecurringPicker && styles.toolbarItemActive]}
@@ -191,16 +261,17 @@ export function AddTaskModal({
                                 <Ionicons name={isRepeating ? "repeat" : "repeat-outline"} size={22} color={showRecurringPicker || isRepeating ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.toolbarItem, showProjectPicker && styles.toolbarItemActive]}
+                                style={[styles.toolbarItem, (showDatePicker && pickerMode === 'time') && styles.toolbarItemActive]}
                                 onPress={() => {
-                                    setShowProjectPicker(!showProjectPicker);
+                                    setPickerMode('time');
+                                    setShowDatePicker(!showDatePicker || pickerMode !== 'time');
                                     setShowSubtaskInput(false);
                                     setShowLabelPicker(false);
-                                    setShowDatePicker(false);
                                     setShowRecurringPicker(false);
+                                    setShowProjectPicker(false);
                                 }}
                             >
-                                <Ionicons name={selectedProjectId ? "folder" : "folder-outline"} size={22} color={showProjectPicker || selectedProjectId ? colors.primary : colors.textSecondary} />
+                                <Ionicons name={startTime ? "time" : "time-outline"} size={22} color={(showDatePicker && pickerMode === 'time') || startTime ? colors.primary : colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
@@ -212,7 +283,11 @@ export function AddTaskModal({
                                     <View key={s.id} style={styles.subtaskItem}>
                                         <Ionicons name="square-outline" size={18} color={colors.textSecondary} />
                                         <Text style={styles.subtaskItemText}>{s.title}</Text>
-                                        <TouchableOpacity onPress={() => removeSubtask(s.id)}>
+                                        <TouchableOpacity
+                                            onPress={() => removeSubtask(s.id)}
+                                            style={styles.subtaskRemoveBtn}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
                                             <Ionicons name="close-circle" size={18} color={colors.error} />
                                         </TouchableOpacity>
                                     </View>
@@ -242,13 +317,24 @@ export function AddTaskModal({
                                         style={[
                                             styles.labelChip,
                                             { borderColor: l.color },
-                                            labels.includes(l.id) && { backgroundColor: l.color + '30' },
+                                            labels.includes(l.id) && { backgroundColor: l.color },
                                         ]}
                                         onPress={() => toggleLabel(l.id)}
                                     >
-                                        {labels.includes(l.id) && <Ionicons name="checkmark" size={14} color={l.color} />}
-                                        <View style={[styles.labelColorDot, { backgroundColor: l.color }]} />
-                                        <Text style={styles.labelText}>{l.name}</Text>
+                                        {labels.includes(l.id) ? (
+                                            <>
+                                                <Ionicons name="checkmark" size={14} color={(l.id === 'important' || l.id === 'habit') ? colors.textPrimary : colors.textInverse} />
+                                                <Text style={[styles.labelText, {
+                                                    color: (l.id === 'important' || l.id === 'habit') ? colors.textPrimary : colors.textInverse,
+                                                    fontWeight: '600'
+                                                }]}>{l.name}</Text>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <View style={[styles.labelColorDot, { backgroundColor: l.color }]} />
+                                                <Text style={styles.labelText}>{l.name}</Text>
+                                            </>
+                                        )}
                                     </TouchableOpacity>
                                 ))}
                             </ScrollView>
@@ -359,75 +445,56 @@ export function AddTaskModal({
                             </ScrollView>
                         )}
 
-                        {/* Date picker */}
+                        {/* Date & Time Section */}
                         {showDatePicker && (
-                            <View style={styles.datePickerContainer}>
-                                <Text style={styles.dateLabel}>
-                                    Due Date: {dueDate ? dueDate.toLocaleDateString() : 'Not set'}
-                                </Text>
-                                <View style={{ height: 120, width: '100%', overflow: 'hidden', justifyContent: 'center' }}>
-                                    <DateTimePicker
-                                        value={dueDate || new Date()}
-                                        mode="date"
-                                        display="spinner"
-                                        themeVariant="light"
-                                        style={{ height: 180 }} // Over-height clipped by container reduces visible rows
-                                        onChange={(event, selectedDate) => {
-                                            if (Platform.OS === 'android') {
-                                                setShowDatePicker(false);
-                                            }
-                                            if (selectedDate) {
-                                                setDueDate(selectedDate);
-                                            }
-                                        }}
-                                        minimumDate={new Date()}
-                                        textColor={colors.textPrimary}
-                                    />
-                                </View>
-                                <View style={styles.datePickerActions}>
-                                    <TouchableOpacity
-                                        style={styles.datePickerClear}
-                                        onPress={() => {
-                                            setDueDate(null);
+                            <View style={styles.pickerContainer}>
+                                <DateTimePicker
+                                    value={
+                                        pickerMode === 'date' ? (dueDate || new Date()) :
+                                            pickerMode === 'deadline' ? (deadlineDate || new Date()) :
+                                                (startTime ? new Date(`2000-01-01T${startTime}`) : new Date())
+                                    }
+                                    mode={pickerMode === 'time' ? 'time' : 'date'}
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={(event: any, selectedDate?: Date) => {
+                                        if (Platform.OS === 'android') setShowDatePicker(false);
+                                        if (selectedDate) {
+                                            if (pickerMode === 'date') setDueDate(selectedDate);
+                                            else if (pickerMode === 'deadline') setDeadlineDate(selectedDate);
+                                            else setStartTime(selectedDate);
+                                        }
+                                    }}
+                                    textColor={colors.textPrimary}
+                                />
+                                {Platform.OS === 'ios' && (
+                                    <View style={styles.pickerActions}>
+                                        <TouchableOpacity onPress={() => {
+                                            if (pickerMode === 'date') setDueDate(null);
+                                            else if (pickerMode === 'deadline') setDeadlineDate(null);
+                                            else setStartTime(null);
                                             setShowDatePicker(false);
-                                        }}
-                                    >
-                                        <Text style={styles.datePickerClearText}>Clear</Text>
-                                    </TouchableOpacity>
-                                    {Platform.OS === 'ios' && (
-                                        <TouchableOpacity
-                                            style={styles.datePickerDone}
-                                            onPress={() => setShowDatePicker(false)}
-                                        >
-                                            <Text style={styles.datePickerDoneText}>Done</Text>
+                                        }}>
+                                            <Text style={styles.pickerClear}>Clear</Text>
                                         </TouchableOpacity>
-                                    )}
-                                </View>
+                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                            <Text style={styles.pickerDone}>Done</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
                             </View>
                         )}
 
-                        <View style={styles.row}>
-                            <View style={styles.modeToggle}>
-                                <TouchableOpacity
-                                    style={[styles.modeButton, mode === 'home' && styles.modeButtonActive]}
-                                    onPress={() => setMode('home')}
-                                >
-                                    <Text style={[styles.modeText, mode === 'home' && styles.modeTextActive]}>Home</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modeButton, mode === 'work' && styles.modeButtonActive]}
-                                    onPress={() => setMode('work')}
-                                >
-                                    <Text style={[styles.modeText, mode === 'work' && styles.modeTextActive]}>Work</Text>
-                                </TouchableOpacity>
-                            </View>
+                        <View style={styles.footer}>
+                            <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
 
                             <TouchableOpacity
                                 style={[styles.submitButton, (!title.trim() || loading) && styles.submitDisabled]}
                                 onPress={handleSubmit}
                                 disabled={!title.trim() || loading}
                             >
-                                <Text style={styles.submitText}>Add</Text>
+                                <Text style={styles.submitText}>{loading ? 'Creating...' : 'Create'}</Text>
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
@@ -468,6 +535,32 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
+        marginBottom: spacing.md,
+    },
+    modeSection: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        paddingBottom: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border + '30',
+    },
+    modeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.surfaceSecondary,
+    },
+    modeChipText: {
+        fontSize: fontSizes.caption,
+        color: colors.textSecondary,
+        fontWeight: '500',
+    },
+    modeChipTextActive: {
+        color: colors.textInverse,
+        fontWeight: '600',
     },
     iconToolbar: {
         flexDirection: 'row',
@@ -516,40 +609,33 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
         marginBottom: spacing.sm,
+        fontWeight: '600',
     },
-    row: {
+    footer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: spacing.md,
+        gap: spacing.md,
+        marginTop: spacing.lg,
     },
-    modeToggle: {
-        flexDirection: 'row',
-        backgroundColor: colors.surfaceSecondary,
+    cancelButton: {
+        flex: 1,
+        backgroundColor: colors.error,
+        paddingVertical: spacing.md,
         borderRadius: borderRadius.md,
-        padding: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    modeButton: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.sm,
-    },
-    modeButtonActive: {
-        backgroundColor: colors.surface,
-    },
-    modeText: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textSecondary,
-    },
-    modeTextActive: {
-        color: colors.textPrimary,
-        fontWeight: '500' as const,
+    cancelText: {
+        fontSize: fontSizes.body,
+        color: colors.textInverse,
+        fontWeight: '600' as const,
     },
     submitButton: {
+        flex: 1,
         backgroundColor: colors.primary,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
+        paddingVertical: spacing.md,
         borderRadius: borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     submitDisabled: {
         opacity: 0.5,
@@ -566,38 +652,25 @@ const styles = StyleSheet.create({
         marginVertical: spacing.sm,
         borderWidth: 1,
         borderColor: colors.primary + '20',
-        alignItems: 'center',
     },
-    dateLabel: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.primary,
-        fontWeight: '600' as const,
-        marginBottom: spacing.xs,
-        textAlign: 'center',
+    pickerContainer: {
+        backgroundColor: colors.surfaceSecondary,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        marginBottom: spacing.md,
     },
-    datePickerDone: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        backgroundColor: colors.primary,
-        borderRadius: borderRadius.sm,
-    },
-    datePickerDoneText: {
-        fontSize: fontSizes.bodySmall,
-        color: colors.textInverse,
-        fontWeight: '600' as const,
-    },
-    datePickerActions: {
+    pickerActions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: spacing.sm,
     },
-    datePickerClear: {
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-    },
-    datePickerClearText: {
-        fontSize: fontSizes.bodySmall,
+    pickerClear: {
+        fontSize: fontSizes.body,
         color: colors.error,
+    },
+    pickerDone: {
+        fontSize: fontSizes.body,
+        color: colors.primary,
         fontWeight: '500' as const,
     },
     badgeText: {
@@ -616,6 +689,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
+        marginTop: spacing.sm,
     },
     subtaskInput: {
         flex: 1,
@@ -625,16 +699,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.sm,
         backgroundColor: colors.surface,
         borderRadius: borderRadius.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     addSubtaskBtn: {
         padding: spacing.xs,
+    },
+    subtaskRemoveBtn: {
+        padding: spacing.xs,
+        marginLeft: spacing.sm,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     subtaskItem: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
-        paddingVertical: spacing.xs,
-        marginTop: spacing.xs,
+        paddingVertical: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border + '30',
     },
     subtaskItemText: {
         flex: 1,

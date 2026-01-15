@@ -91,13 +91,6 @@ export function TaskCard({
                 </View>
             </View>
 
-            {/* Mode indicator */}
-            <View
-                style={[
-                    styles.modeIndicator,
-                    { backgroundColor: task.mode === 'home' ? colors.modePersonal : colors.modeProfessional },
-                ]}
-            />
         </TouchableOpacity>
     );
 }
@@ -196,11 +189,5 @@ const styles = StyleSheet.create({
         fontSize: fontSizes.caption,
         color: colors.primary,
         maxWidth: 80,
-    },
-    modeIndicator: {
-        width: 3,
-        height: 24,
-        borderRadius: 2,
-        marginLeft: spacing.sm,
     },
 });

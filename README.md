@@ -71,10 +71,12 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - ✅ Create, edit, and delete tasks
 - ✅ Task title and description
 - ✅ Set due date and time
+- ✅ **New**: Set task deadlines for better planning
 - ✅ Mark tasks as complete/incomplete
 - ✅ Add subtasks to tasks
 - ✅ Set reminders for tasks
 - ✅ Recurring tasks (daily, weekly, monthly)
+- ✅ Consolidated task toolbar for quick access to all options
 - ✅ Drag & drop to reorder tasks and subtasks
 
 ### 2. Labels
@@ -89,7 +91,7 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - 📁 Integrated project management in Sidebar
 - 📁 View project progress
 - 📁 Edit and delete projects
-- 📁 Group tasks by project in list views
+- 📁 Group tasks by project (including a "No Project" section)
 
 ### 4. Home/Work Mode
 - 🏠 Toggle between Home and Work modes
@@ -150,6 +152,7 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - ⚙️ Notification preferences
 - ⚙️ Option to ignore modes
 - ⚙️ Theme customization
+- ⚙️ Enhanced labels management with vertical scrolling
 
 ---
 

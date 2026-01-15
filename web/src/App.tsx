@@ -14,6 +14,8 @@ const WidgetOnly = lazy(() => import('./pages/WidgetOnly'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 
+import AppLayout from './components/layout/AppLayout';
+
 // Simple loading component
 function LoadingScreen() {
   return (
@@ -58,7 +60,11 @@ function ProtectedRouteWrapper() {
     return <Navigate to="/login" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <AppLayout>
+      <Outlet />
+    </AppLayout>
+  );
 }
 
 function App() {

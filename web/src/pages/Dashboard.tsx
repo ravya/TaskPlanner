@@ -1,5 +1,5 @@
-import { getAuth, signOut } from 'firebase/auth';
-import { useNavigate, Link } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
+import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import AddTaskInline from '../components/AddTaskInline';
@@ -27,7 +27,6 @@ interface Task {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [todaysTasks, setTodaysTasks] = useState<Task[]>([]);
@@ -284,15 +283,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const auth = getAuth();
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const handleMoveToToday = async (taskId: string) => {
     try {
@@ -521,27 +511,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Home</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Welcome back, {user?.displayName?.split(' ')[0] || 'User'}!
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

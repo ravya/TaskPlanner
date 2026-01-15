@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Task, TaskMode } from '../types';
 import { getTasks, subscribeToTasks, subscribeToTodayTasks } from '../services/firebase';
 
+export type FilterType = 'today' | 'weekly' | 'upcoming' | 'recurring' | 'completed' | 'trash' | 'project';
+
 interface UseTasksOptions {
     mode?: TaskMode;
     date?: string;
     projectId?: string;
+    filterType?: FilterType;
     includeCompleted?: boolean;
     realtime?: boolean;
 }
@@ -28,7 +31,7 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
         } finally {
             setLoading(false);
         }
-    }, [userId, options?.mode, options?.date, options?.projectId, options?.includeCompleted]);
+    }, [userId, options?.mode, options?.date, options?.projectId, options?.filterType, options?.includeCompleted]);
 
     useEffect(() => {
         if (!userId) {
@@ -41,22 +44,74 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
             setLoading(true);
             const unsubscribe = subscribeToTasks(userId, (data) => {
                 let filtered = data;
-                if (options?.mode) {
+
+                // First filter by mode
+                if (options?.mode && options.mode !== 'all' as any) {
                     filtered = filtered.filter((t) => t.mode === options.mode);
                 }
-                if (options?.date) {
-                    // Support both dueDate (new) and startDate (legacy)
-                    filtered = filtered.filter((t) => {
-                        const taskDate = (t as any).dueDate || (t as any).startDate;
-                        return taskDate === options.date;
-                    });
+
+                // Apply specific filter types
+                if (options?.filterType) {
+                    const now = new Date();
+                    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                    // For weekly, get date 7 days from now
+                    const nextWeekDate = new Date();
+                    nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+                    const nextWeekStr = `${nextWeekDate.getFullYear()}-${String(nextWeekDate.getMonth() + 1).padStart(2, '0')}-${String(nextWeekDate.getDate()).padStart(2, '0')}`;
+
+                    switch (options.filterType) {
+                        case 'today':
+                            filtered = filtered.filter(t => {
+                                const taskDate = (t as any).dueDate || (t as any).startDate;
+                                return taskDate === todayStr && !t.isDeleted;
+                            });
+                            break;
+                        case 'weekly':
+                            filtered = filtered.filter(t => {
+                                const taskDate = (t as any).dueDate || (t as any).startDate;
+                                return taskDate >= todayStr && taskDate <= nextWeekStr && !t.isDeleted;
+                            });
+                            break;
+                        case 'upcoming':
+                            filtered = filtered.filter(t => {
+                                const taskDate = (t as any).dueDate || (t as any).startDate;
+                                return taskDate > todayStr && !t.isDeleted;
+                            });
+                            break;
+                        case 'recurring':
+                            filtered = filtered.filter(t => t.isRepeating && !t.isDeleted);
+                            break;
+                        case 'completed':
+                            filtered = filtered.filter(t => t.completed && !t.isDeleted);
+                            break;
+                        case 'trash':
+                            filtered = filtered.filter(t => t.isDeleted === true);
+                            break;
+                        case 'project':
+                            if (options.projectId) {
+                                filtered = filtered.filter(t => t.projectId === options.projectId && !t.isDeleted);
+                            }
+                            break;
+                    }
+                } else {
+                    // Default behavior (if no filterType specified)
+                    if (options?.date) {
+                        filtered = filtered.filter((t) => {
+                            const taskDate = (t as any).dueDate || (t as any).startDate;
+                            return taskDate === options.date;
+                        });
+                    }
+                    if (options?.projectId) {
+                        filtered = filtered.filter((t) => t.projectId === options.projectId);
+                    }
+                    if (!options?.includeCompleted) {
+                        filtered = filtered.filter((t) => !t.completed);
+                    }
+                    // Filter out deleted by default
+                    filtered = filtered.filter(t => !t.isDeleted);
                 }
-                if (options?.projectId) {
-                    filtered = filtered.filter((t) => t.projectId === options.projectId);
-                }
-                if (!options?.includeCompleted) {
-                    filtered = filtered.filter((t) => !t.completed);
-                }
+
                 setTasks(filtered);
                 setLoading(false);
             });
@@ -64,7 +119,7 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
         } else {
             loadTasks();
         }
-    }, [userId, loadTasks, options?.realtime]);
+    }, [userId, loadTasks, options?.realtime, options?.filterType, options?.projectId]);
 
     return { tasks, loading, error, refresh: loadTasks, setTasks };
 }

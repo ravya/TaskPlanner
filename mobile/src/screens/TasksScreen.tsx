@@ -29,11 +29,12 @@ export function TasksScreen(props: any) {
     const { user } = useAuth();
     const { settings } = useSettings();
     const { projects } = useProjects(user?.uid);
-    const { tasks, loading, refresh } = useTasks(user?.uid, { includeCompleted: true, realtime: true });
-
-    // Get project filter from navigation params
+    // Get filter params from navigation
     const route = React.useMemo(() => (props as any)?.route, [props]);
+    const filterType = route?.params?.filterType;
     const routeProjectId = route?.params?.projectId;
+    const pageTitle = route?.params?.title || 'Tasks';
+
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>(settings.defaultMode === 'personal' ? 'home' : (settings.defaultMode === 'professional' ? 'work' : 'all'));
     const [showAddModal, setShowAddModal] = useState(false);
@@ -41,9 +42,15 @@ export function TasksScreen(props: any) {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
+    const { tasks, loading, refresh } = useTasks(user?.uid, {
+        includeCompleted: true,
+        realtime: true,
+        filterType,
+        projectId: routeProjectId,
+        mode: modeFilter === 'all' ? undefined : modeFilter
+    });
+
     const filteredTasks = tasks.filter((task) => {
-        if (routeProjectId && task.projectId !== routeProjectId) return false;
-        if (modeFilter !== 'all' && task.mode !== modeFilter) return false;
         if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         return true;
     });
@@ -139,7 +146,7 @@ export function TasksScreen(props: any) {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.title}>Tasks</Text>
+                <Text style={styles.title}>{pageTitle}</Text>
                 <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
                     <Text style={styles.addButtonText}>+ Add</Text>
                 </TouchableOpacity>

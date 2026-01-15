@@ -86,10 +86,10 @@ TaskPlanner is a modern productivity application designed to help individuals an
 ### 3. Projects
 - 📁 Create and manage projects
 - 📁 Assign tasks to projects
+- 📁 Integrated project management in Sidebar
 - 📁 View project progress
-- 📁 Mark project as done
 - 📁 Edit and delete projects
-- 📁 Group tasks by project in widget
+- 📁 Group tasks by project in list views
 
 ### 4. Home/Work Mode
 - 🏠 Toggle between Home and Work modes
@@ -97,12 +97,13 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - 🏠 Option to disable mode filtering in settings
 - 🏠 Dropdown/toggle for quick mode switching
 
-### 5. Multi-Select & Bulk Actions
-- ☑️ Long-press to select multiple tasks
-- ☑️ Bulk mark as complete
-- ☑️ Bulk delete
-- ☑️ Bulk change labels
-- ☑️ Bulk move to a different date
+### 5. Navigation & Lists
+- 🧭 Sidebar navigation for quick access to task lists
+- 🧭 **Today's Tasks**: Quick overview of current tasks
+- 🧭 **Weekly Tasks**: View tasks for the upcoming week
+- 🧭 **Upcoming**: Future task planning
+- 🧭 **Recurring**: Manage habit and repeating tasks
+- 🧭 Bottom tab navigation for major app sections (Dashboard, Tasks, Analytics, Settings)
 
 ### 6. Search & Filter
 - 🔍 Search tasks by text
@@ -195,7 +196,8 @@ TaskPlanner/
 │   │   │   ├── AnalyticsScreen.tsx
 │   │   │   └── SettingsScreen.tsx
 │   │   ├── navigation/          # Navigation setup
-│   │   │   └── AppNavigator.tsx
+│   │   │   ├── AppNavigator.tsx
+│   │   │   └── Sidebar.tsx         # Custom drawer content
 │   │   ├── services/            # Services
 │   │   │   └── firebase/       # Firebase integration
 │   │   ├── hooks/               # Custom hooks

@@ -264,6 +264,36 @@ export async function updateTaskPositions(
     await batch.commit();
 }
 
+// Cleanup trash: permanently delete tasks that were deleted more than 10 days ago
+export async function cleanupTrash(userId: string): Promise<void> {
+    const tasksRef = getUserTasksRef(userId);
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    const tenDaysAgoISO = tenDaysAgo.toISOString();
+
+    // Query for tasks that are deleted and were last updated (deleted) before 10 days ago
+    const q = query(
+        tasksRef,
+        where('isDeleted', '==', true),
+        where('updatedAt', '<', tenDaysAgoISO)
+    );
+
+    try {
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return;
+
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        console.log(`Cleaned up ${snapshot.size} old trash tasks`);
+    } catch (error) {
+        console.error('Error cleaning up trash:', error);
+    }
+}
+
 // Subscribe to tasks (real-time updates)
 export function subscribeToTasks(
     userId: string,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { getAuth, signOut } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import AddTaskInline from '../components/AddTaskInline';
 import { projectService } from '../services/firebase/project.service';
 import type { Project, ProjectMode } from '../types/project';
@@ -27,7 +27,6 @@ interface Task {
 }
 
 export default function Tasks() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const formRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,7 +37,7 @@ export default function Tasks() {
   const [user, setUser] = useState<any>(null);
   const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>(
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom' | 'upcoming' | 'recurring' | 'completed' | 'trash'>(
     (searchParams.get('filter') as any) || 'all'
   );
   const [customDateStart, setCustomDateStart] = useState<string>('');
@@ -54,7 +53,7 @@ export default function Tasks() {
 
   useEffect(() => {
     const filterParam = searchParams.get('filter');
-    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom'].includes(filterParam)) {
+    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom', 'upcoming', 'recurring', 'completed', 'trash'].includes(filterParam)) {
       setDateFilter(filterParam as any);
     }
   }, [searchParams]);
@@ -462,15 +461,6 @@ export default function Tasks() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const auth = getAuth();
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const formatDateTime = (date: string, time?: string) => {
     if (!date) return '';
@@ -504,10 +494,17 @@ export default function Tasks() {
     // First, filter by status
     let filteredTasks = [...tasks];
 
-    if (statusFilter === 'active') {
-      filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
-    } else if (statusFilter === 'completed') {
-      filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
+    if (statusFilter === 'active' || dateFilter === 'today' || dateFilter === 'thisWeek' || dateFilter === 'upcoming') {
+      filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed && !t.isDeleted);
+    } else if (statusFilter === 'completed' || dateFilter === 'completed') {
+      filteredTasks = filteredTasks.filter(t => (t.status === 'completed' || t.completed) && !t.isDeleted);
+    } else if (dateFilter === 'trash') {
+      filteredTasks = filteredTasks.filter(t => t.isDeleted === true);
+    } else if (dateFilter === 'recurring') {
+      filteredTasks = filteredTasks.filter(t => t.isRepeating === true && !t.isDeleted);
+    } else {
+      // Default: hide deleted
+      filteredTasks = filteredTasks.filter(t => !t.isDeleted);
     }
 
     // Filter by mode
@@ -548,6 +545,8 @@ export default function Tasks() {
           const taskDateObj = new Date(taskDate);
           const todayObj = new Date(today);
           return taskDateObj.getMonth() === todayObj.getMonth() && taskDateObj.getFullYear() === todayObj.getFullYear();
+        } else if (dateFilter === 'upcoming') {
+          return taskDate > today;
         } else if (dateFilter === 'custom') {
           if (customDateStart && taskDate < customDateStart) return false;
           if (customDateEnd && taskDate > customDateEnd) return false;
@@ -634,26 +633,6 @@ export default function Tasks() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ... (Header) ... */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 sm:py-6 gap-3 sm:gap-0">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tasks</h1>
-            </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 text-center sm:text-left">
-                ← Back to Dashboard
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
@@ -978,8 +957,8 @@ export default function Tasks() {
                       setShowProjectsPanel(false);
                     }}
                     className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'hover:bg-gray-100 text-gray-700'
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'hover:bg-gray-100 text-gray-700'
                       }`}
                   >
                     📋 All Projects
@@ -992,8 +971,8 @@ export default function Tasks() {
                         setShowProjectsPanel(false);
                       }}
                       className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
-                          ? 'bg-blue-100 text-blue-700 font-medium'
-                          : 'hover:bg-gray-100 text-gray-700'
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'hover:bg-gray-100 text-gray-700'
                         }`}
                     >
                       <span style={{ color: project.color }}>{project.icon}</span>

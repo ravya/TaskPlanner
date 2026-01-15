@@ -9,12 +9,106 @@ A cross-platform task management application with real-time synchronization, pro
 TaskPlanner is a modern productivity application designed to help individuals and teams organize their tasks efficiently. The app provides a seamless experience across web and mobile platforms with real-time synchronization, ensuring your tasks are always up-to-date regardless of the device you're using.
 
 **Key Highlights:**
-- 🌐 **Cross-Platform**: Available on Web, iOS, and Android
+- 🌐 **Cross-Platform**: Available on Web and Android, later (Ios)
 - ☁️ **Real-time Sync**: Changes sync instantly across all devices
 - 📱 **Native Mobile Experience**: Built with React Native and Expo
 - 🎯 **Productivity Focused**: Analytics, widgets, and smart organization
 - 🔐 **Secure**: Firebase Authentication with Google OAuth support
 
+
+## ✨ Features
+
+### 1. Task Management
+- ✅ Create, edit, and delete tasks
+- ✅ Task title and description
+- ✅ Set due date and time
+- ✅ Mark tasks as complete/incomplete
+- ✅ Add subtasks to tasks
+- ✅ Set reminders for tasks
+- ✅ Recurring tasks (daily, weekly, monthly)
+- ✅ Drag & drop to reorder tasks and subtasks
+- ✅ Set Deadline for a task
+- ✅ Set Label and project to task
+
+### 2. Labels
+- 🏷️ Create custom labels with colors
+- 🏷️ Assign multiple labels to tasks
+- 🏷️ Filter tasks by labels
+- 🏷️ Bulk label operations
+
+### 3. Projects
+- 📁 Create and manage projects
+- 📁 Assign tasks to projects
+- 📁 View project progress
+- 📁 Mark project as done
+- 📁 Edit and delete projects
+- 📁 Group tasks by project in widget
+- 📁 Set label, deadline to projects.
+
+### 4. Home/Work Mode
+- 🏠 Toggle between Home and Work modes
+- 🏠 View tasks for a selected mode or both modes together
+- 🏠 Option to disable mode filtering in settings
+- 🏠 Dropdown/toggle for quick mode switching
+
+### 5. Multi-Select & Bulk Actions
+- ☑️ Long-press to select multiple tasks
+- ☑️ Bulk mark as complete
+- ☑️ Bulk delete
+- ☑️ Bulk change labels
+- ☑️ Bulk move to a different date
+
+### 6. Search & Filter
+- 🔍 Filter by labels
+- 🔍 Filter by due date
+- 🔍 Advanced filtering options
+- 🔍 Filtering by projects, mode
+- 🔍 Search tasks by text ( to be picked later)
+
+### 7. Dashboard & Analytics
+- 📊 Today's tasks overview
+- 📊 Task statistics cards
+- 📊 Completion percentage
+- 📊 Weekly completion trends
+- 📊 Productivity tracking
+- 📊 Visual charts and insights
+
+### 8. Stickies Widget
+- 📌 Visual sticky notes for today's tasks
+- 📌 Group tasks by project
+- 📌 Available on both web and mobile
+- 📌 Quick task overview at a glance
+
+### 9. Authentication
+- 🔐 Email/password login
+- 🔐 Google Sign-in
+- 🔐 User registration
+- 🔐 Auto-login with session persistence
+- 🔐 Secure logout
+
+### 10. Sync & Cloud
+- ☁️ Real-time sync across devices
+- ☁️ Cloud backup via Firebase
+- ☁️ Offline support
+- ☁️ Automatic conflict resolution
+
+### 11. Notifications
+- 🔔 Task reminders
+- 🔔 Push notifications (mobile)
+- 🔔 Notification settings toggle
+- 🔔 Customizable notification preferences
+
+### 12. Settings
+- ⚙️ User preferences
+- ⚙️ Sound toggles (mobile)
+- ⚙️ Notification preferences
+- ⚙️ Option to ignore modes
+- ⚙️ Theme customization
+
+### 13. Sidebar Panel
+- Side bar view of customised lists, projects and completed tasks.
+
+---
 ---
 
 ## 🛠 Tech Stack
@@ -62,93 +156,6 @@ TaskPlanner is a modern productivity application designed to help individuals an
 | **E2E Testing** | Cypress |
 | **Linting** | ESLint + TypeScript ESLint |
 | **Type Checking** | TypeScript |
-
----
-
-## ✨ Features
-
-### 1. Task Management
-- ✅ Create, edit, and delete tasks
-- ✅ Task title and description
-- ✅ Set due date and time
-- ✅ Mark tasks as complete/incomplete
-- ✅ Add subtasks to tasks
-- ✅ Set reminders for tasks
-- ✅ Recurring tasks (daily, weekly, monthly)
-- ✅ Drag & drop to reorder tasks and subtasks
-
-### 2. Labels
-- 🏷️ Create custom labels with colors
-- 🏷️ Assign multiple labels to tasks
-- 🏷️ Filter tasks by labels
-- 🏷️ Bulk label operations
-
-### 3. Projects
-- 📁 Create and manage projects
-- 📁 Assign tasks to projects
-- 📁 View project progress
-- 📁 Mark project as done
-- 📁 Edit and delete projects
-- 📁 Group tasks by project in widget
-
-### 4. Home/Work Mode
-- 🏠 Toggle between Home and Work modes
-- 🏠 View tasks for a selected mode or both modes together
-- 🏠 Option to disable mode filtering in settings
-- 🏠 Dropdown/toggle for quick mode switching
-
-### 5. Multi-Select & Bulk Actions
-- ☑️ Long-press to select multiple tasks
-- ☑️ Bulk mark as complete
-- ☑️ Bulk delete
-- ☑️ Bulk change labels
-- ☑️ Bulk move to a different date
-
-### 6. Search & Filter
-- 🔍 Search tasks by text
-- 🔍 Filter by labels
-- 🔍 Filter by due date
-- 🔍 Advanced filtering options
-
-### 7. Dashboard & Analytics
-- 📊 Today's tasks overview
-- 📊 Task statistics cards
-- 📊 Completion percentage
-- 📊 Weekly completion trends
-- 📊 Productivity tracking
-- 📊 Visual charts and insights
-
-### 8. Stickies Widget
-- 📌 Visual sticky notes for today's tasks
-- 📌 Group tasks by project
-- 📌 Available on both web and mobile
-- 📌 Quick task overview at a glance
-
-### 9. Authentication
-- 🔐 Email/password login
-- 🔐 Google Sign-in
-- 🔐 User registration
-- 🔐 Auto-login with session persistence
-- 🔐 Secure logout
-
-### 10. Sync & Cloud
-- ☁️ Real-time sync across devices
-- ☁️ Cloud backup via Firebase
-- ☁️ Offline support
-- ☁️ Automatic conflict resolution
-
-### 11. Notifications
-- 🔔 Task reminders
-- 🔔 Push notifications (mobile)
-- 🔔 Notification settings toggle
-- 🔔 Customizable notification preferences
-
-### 12. Settings
-- ⚙️ User preferences
-- ⚙️ Sound toggles (mobile)
-- ⚙️ Notification preferences
-- ⚙️ Option to ignore modes
-- ⚙️ Theme customization
 
 ---
 

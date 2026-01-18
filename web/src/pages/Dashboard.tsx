@@ -1,10 +1,11 @@
-import { getAuth, signOut } from 'firebase/auth';
-import { useNavigate, Link } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
+import { Link } from 'react-router-dom';
+import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
 import AddTaskInline from '../components/AddTaskInline';
-import { projectService } from '../services/firebase/project.service';
-import type { Project, ProjectMode } from '../types/project';
+import ModeSlider from '../components/ModeSlider';
+import { useUIStore } from '../store/slices/uiSlice';
 
 interface Task {
   id: string;
@@ -27,7 +28,7 @@ interface Task {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
+  const { defaultMode } = useUIStore();
   const [user, setUser] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [todaysTasks, setTodaysTasks] = useState<Task[]>([]);
@@ -36,13 +37,11 @@ export default function Dashboard() {
   const [showAllTodayTasks, setShowAllTodayTasks] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
-    return (localStorage.getItem('taskModeFilter') as any) || 'all';
+    return (localStorage.getItem('taskModeFilter') as any) || defaultMode || 'all';
   });
 
-  // Project state
-  const [projects, setProjects] = useState<Project[]>([]);
+  // Project state - keep selectedProjectId for task filtering
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
-  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -50,7 +49,9 @@ export default function Dashboard() {
     setUser(currentUser);
 
     // Check if we should show email verification banner
-    if (currentUser && !currentUser.emailVerified) {
+    const isGoogleUser = currentUser?.providerData.some(p => p.providerId === 'google.com');
+
+    if (currentUser && !currentUser.emailVerified && !isGoogleUser) {
       const createdAt = currentUser.metadata.creationTime;
       const accountAge = Date.now() - new Date(createdAt || 0).getTime();
       const oneWeek = 7 * 24 * 60 * 60 * 1000;
@@ -66,30 +67,12 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Subscribe to projects when user and modeFilter change
+  // Reset project selection when mode changes to 'all'
   useEffect(() => {
-    if (!user?.uid) return;
     if (modeFilter === 'all') {
-      // When 'all' mode, don't filter by project
       setSelectedProjectId(undefined);
-      setProjects([]);
-      return;
     }
-
-    const unsubscribe = projectService.subscribeToProjects(
-      user.uid,
-      (projectList) => {
-        setProjects(projectList);
-        // Ensure default project exists
-        if (projectList.length === 0) {
-          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
-        }
-      },
-      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
-    );
-
-    return () => unsubscribe();
-  }, [user?.uid, modeFilter]);
+  }, [modeFilter]);
 
   const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
     const date = new Date(currentDate);
@@ -284,15 +267,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const auth = getAuth();
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const handleMoveToToday = async (taskId: string) => {
     try {
@@ -381,8 +355,9 @@ export default function Dashboard() {
     repeatFrequency: 'daily' | 'weekly' | 'monthly';
     repeatEndDate: string;
     mode: 'personal' | 'professional';
-    subtasks?: { id: string; title: string; completed: boolean }[];
-    projectId?: string;
+    subtasks?: { id: string; title: string; completed: boolean }[] | null;
+    projectId?: string | null;
+    deadlineDate?: string | null;
   }) => {
     if (!user) {
       alert('You must be logged in to create a task');
@@ -510,38 +485,9 @@ export default function Dashboard() {
 
 
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Home</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Welcome back, {user?.displayName?.split(' ')[0] || 'User'}!
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -579,18 +525,33 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-amber-700">
                   Please verify your email address to access all features.
                 </p>
+                <div className="mt-2">
+                  <button
+                    onClick={() => {
+                      user?.reload().then(() => {
+                        window.location.reload();
+                      });
+                    }}
+                    className="text-xs font-semibold text-amber-800 hover:text-amber-900 underline"
+                  >
+                    I've verified my email - Click to Refresh
+                  </button>
+                </div>
               </div>
               <button
                 onClick={() => setShowEmailVerification(false)}
                 className="ml-auto flex-shrink-0 text-amber-400 hover:text-amber-600"
               >
-                ✕
+                Close
               </button>
             </div>
           </div>
         )}
 
         {/* Task Statistics - 3 Main Tiles */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Home</h1>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Today's Tasks */}
           <Link
@@ -685,64 +646,66 @@ export default function Dashboard() {
 
         {/* Pending Tasks from Past Days */}
         {pastPendingTasks.length > 0 && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg shadow mb-8">
-            <div className="p-6 border-b border-orange-200 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-semibold text-orange-900 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Pending Tasks from Past Days
-                </h2>
-                <p className="text-sm text-orange-700 mt-1">
-                  {pastPendingTasks.length} task{pastPendingTasks.length !== 1 ? 's' : ''} waiting to be completed
-                </p>
-              </div>
-            </div>
+          <div className="mb-10 bg-orange-50/50 rounded-lg border border-orange-100 overflow-hidden">
+            <h2 className="text-base font-semibold text-orange-900 flex items-center gap-2 p-4 bg-orange-100/30">
+              <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Pending Tasks from Past Days
+              <span className="ml-2 px-2 py-0.5 bg-orange-200/50 text-orange-800 text-[10px] rounded-full font-bold">
+                {pastPendingTasks.length}
+              </span>
+            </h2>
 
-            <div className="divide-y divide-orange-200">
+            <div className="divide-y divide-orange-100/50">
               {pastPendingTasks.map((task) => (
-                <div key={task.id} className="p-4 hover:bg-orange-100 flex items-center gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-base font-medium text-gray-900">
-                        {task.title}
-                      </h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                    {task.description && (
-                      <p className="text-sm text-gray-600 mb-1">
-                        {task.description}
+                <div key={task.id} className="py-2 hover:bg-orange-100/30 flex items-center justify-between gap-3 group px-4 min-h-[48px] transition-colors">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className={clsx(
+                      "px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border shrink-0",
+                      (task.mode || 'personal') === 'personal'
+                        ? 'border-blue-200 text-blue-600 bg-blue-50/30'
+                        : 'border-orange-200 text-orange-600 bg-orange-50/30'
+                    )}>
+                      {(task.mode || 'personal') === 'personal' ? 'P' : 'W'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-sm font-medium text-gray-900 truncate">
+                          {task.title}
+                        </h3>
+                        {task.tags && task.tags.length > 0 && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {task.tags.map((tag, idx) => (
+                              <span key={idx} className="px-1.5 py-0.25 border border-blue-200 text-blue-500 text-[9px] rounded-full font-medium whitespace-nowrap bg-blue-50/10">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-orange-600/80 font-medium">
+                        Scheduled: {new Date(task.startDate).toLocaleDateString()}
                       </p>
-                    )}
-                    <p className="text-xs text-orange-600">
-                      {task.id.startsWith('missing-') ? (
-                        <>Missing occurrence from: {new Date(task.startDate).toLocaleDateString()} (Repeating task)</>
-                      ) : (
-                        <>Originally scheduled: {new Date(task.startDate).toLocaleDateString()}</>
-                      )}
-                    </p>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => {
                         if (task.id.startsWith('missing-')) {
-                          // Create the missing occurrence
                           handleCreateMissingOccurrence(task);
                         } else {
                           handleMoveToToday(task.id);
                         }
                       }}
-                      className="px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700 font-medium whitespace-nowrap"
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium whitespace-nowrap px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                     >
-                      {task.id.startsWith('missing-') ? 'Create & Move to Today' : 'Move to Today'}
+                      Move to Today
                     </button>
                     {!task.id.startsWith('missing-') && (
                       <button
                         onClick={() => handleIgnoreTask(task.id)}
-                        className="px-3 py-2 bg-gray-400 text-white text-sm rounded-md hover:bg-gray-500 font-medium whitespace-nowrap"
+                        className="text-xs text-gray-500 hover:text-gray-700 font-medium whitespace-nowrap px-2 py-1 rounded hover:bg-gray-100 transition-colors"
                         title="Ignore this task"
                       >
                         Ignore
@@ -768,134 +731,34 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            {/* Mode Filter Tabs */}
-            <div className="flex border-b border-gray-200">
-              <button
-                onClick={() => {
-                  setModeFilter('all');
-                  localStorage.setItem('taskModeFilter', 'all');
+            {/* Mode Filter Slider */}
+            <div className="mb-4">
+              <ModeSlider
+                value={modeFilter}
+                onChange={(mode) => {
+                  setModeFilter(mode);
+                  localStorage.setItem('taskModeFilter', mode);
                 }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                All Modes
-              </button>
-              <button
-                onClick={() => {
-                  setModeFilter('personal');
-                  localStorage.setItem('taskModeFilter', 'personal');
-                }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                🏠 Personal
-              </button>
-              <button
-                onClick={() => {
-                  setModeFilter('professional');
-                  localStorage.setItem('taskModeFilter', 'professional');
-                }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                💼 Professional
-              </button>
+                className="max-w-sm"
+              />
             </div>
 
-            {/* Projects Filter - Only show when a specific mode is selected */}
-            {modeFilter !== 'all' && projects.length > 0 && (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                >
-                  <span>📁</span>
-                  <span className="font-medium">
-                    {selectedProjectId
-                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
-                      : 'All Projects'}
-                  </span>
-                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {selectedProjectId && (
-                  <button
-                    onClick={() => setSelectedProjectId(undefined)}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Clear filter
-                  </button>
-                )}
-              </div>
-            )}
 
-            {/* Projects Dropdown Panel */}
-            {showProjectsPanel && modeFilter !== 'all' && (
-              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedProjectId(undefined);
-                      setShowProjectsPanel(false);
-                    }}
-                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
-                      ? 'bg-blue-100 text-blue-700 font-medium'
-                      : 'hover:bg-gray-100 text-gray-700'
-                      }`}
-                  >
-                    📋 All Projects
-                  </button>
-                  {projects.map(project => (
-                    <button
-                      key={project.id}
-                      onClick={() => {
-                        setSelectedProjectId(project.id);
-                        setShowProjectsPanel(false);
-                      }}
-                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'hover:bg-gray-100 text-gray-700'
-                        }`}
-                    >
-                      <span style={{ color: project.color }}>{project.icon}</span>
-                      <span className="truncate">{project.name}</span>
-                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+
           </div>
 
           {loading ? (
             <div className="p-8 text-center text-gray-500">Loading tasks...</div>
-          ) : todaysTasks.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <p className="text-gray-500 mb-3">No tasks scheduled for today</p>
-              <Link
-                to="/tasks"
-                className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm"
-              >
-                Add a task
-              </Link>
-            </div>
-          ) : (
+          ) : todaysTasks.length === 0 ? null : (
             <div className="divide-y divide-gray-200">
               {(() => {
                 // Filter tasks by mode and project
                 let filteredTasks = modeFilter === 'all'
                   ? todaysTasks
                   : todaysTasks.filter(task => (task.mode || 'personal') === modeFilter);
+
+                // Filter status (only active tasks on dashboard)
+                filteredTasks = filteredTasks.filter(task => task.status !== 'completed' && !task.completed);
 
                 // Further filter by project if one is selected
                 if (selectedProjectId) {
@@ -907,42 +770,76 @@ export default function Dashboard() {
                 const tasksToShow = showAllTodayTasks ? filteredTasks : filteredTasks.slice(0, 5);
 
                 return tasksToShow.map((task) => (
-                  <div key={task.id} className="p-4 hover:bg-gray-50 flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={task.status === 'completed' || task.completed === true}
-                      onChange={() => handleToggleComplete(task)}
-                      className="h-5 w-5 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`text-base font-medium ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                          {task.title}
-                        </h3>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
-                        </span>
-                        {modeFilter === 'all' && (
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-orange-100 text-orange-800'
-                            }`}>
-                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
-                          </span>
+                  <div key={task.id} className="py-2 hover:bg-gray-50 flex items-center justify-between gap-3 group px-4 border-b border-gray-50 last:border-0 min-h-[48px] transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={task.status === 'completed' || task.completed === true}
+                        onChange={() => handleToggleComplete(task)}
+                        className="h-4 w-4 min-w-[16px] text-blue-600 rounded cursor-pointer"
+                      />
+                      <span className={clsx(
+                        "px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border shrink-0",
+                        (task.mode || 'personal') === 'personal'
+                          ? 'border-blue-200 text-blue-600 bg-blue-50/30'
+                          : 'border-orange-200 text-orange-600 bg-orange-50/30'
+                      )}>
+                        {(task.mode || 'personal') === 'personal' ? 'P' : 'W'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3">
+                          <h3 className={`text-sm font-medium truncate ${(task.status === 'completed' || task.completed === true) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                            {task.title}
+                          </h3>
+                          {task.isRepeating && (
+                            <span className="text-gray-400 flex-shrink-0" title={`Repeats ${task.repeatFrequency}`}>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            </span>
+                          )}
+                          {task.tags && task.tags.length > 0 && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              {task.tags.map((tag, idx) => (
+                                <span key={idx} className="px-1.5 py-0.25 border border-blue-200 text-blue-500 text-[9px] rounded-full font-medium whitespace-nowrap bg-blue-50/10">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {task.description && (
+                          <p className={`text-[11px] mt-0.5 truncate ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {task.description}
+                          </p>
                         )}
                       </div>
-                      {task.description && (
-                        <p className={`text-sm mt-1 ${(task.status === 'completed' || task.completed === true) ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {task.description}
-                        </p>
-                      )}
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {task.startTime || 'All day'}
-                    </span>
+
+                    <div className="flex items-center gap-3">
+                      {task.startTime && (
+                        <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">
+                          {task.startTime}
+                        </span>
+                      )}
+
+                      {/* Action buttons - appear on hover */}
+                      <div className="flex items-center gap-1.5 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          to={`/tasks?edit=${task.id}`}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Edit Task"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </Link>
+                      </div>
+                    </div>
                   </div>
                 ));
               })()}
+
               {todaysTasks.length > 5 && (
                 <div className="p-4 text-center">
                   {!showAllTodayTasks ? (
@@ -962,10 +859,10 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-            </div>
+            </div >
           )}
-        </div>
-      </div>
-    </div>
+        </div >
+      </div >
+    </div >
   );
 }

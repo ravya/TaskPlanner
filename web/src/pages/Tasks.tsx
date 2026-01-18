@@ -1,11 +1,25 @@
-import { useState, useEffect, useRef } from 'react';
-import { getAuth, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { getAuth } from 'firebase/auth';
+import {
+  getFirestore,
+  collection,
+  doc,
+  deleteDoc,
+  query,
+  where,
+  Timestamp,
+  deleteField,
+  addDoc,
+  getDocs,
+  updateDoc
+} from 'firebase/firestore';
+import { useSearchParams } from 'react-router-dom';
+import { format, isYesterday } from 'date-fns';
+import { clsx } from 'clsx';
 import AddTaskInline from '../components/AddTaskInline';
-import { projectService } from '../services/firebase/project.service';
-import type { Project, ProjectMode } from '../types/project';
+import { useUIStore } from '../store/slices/uiSlice';
 
+type DateFilter = 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom' | 'upcoming' | 'recurring' | 'completed' | 'trash' | 'backlog';
 interface Task {
   id: string;
   title: string;
@@ -24,56 +38,39 @@ interface Task {
   deletedOccurrences?: string[]; // Array of YYYY-MM-DD dates that were explicitly deleted
   isDeleted?: boolean; // Soft delete flag for parent recurring tasks
   mode?: 'personal' | 'professional'; // Task mode
+  completedAt?: any;
 }
 
 export default function Tasks() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const formRef = useRef<HTMLDivElement>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const { startOfWeek } = useUIStore();
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [sortBy, setSortBy] = useState<'priority' | 'time' | 'deadline' | 'date'>('priority');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom'>(
-    (searchParams.get('filter') as any) || 'all'
+  const [statusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>(
+    (searchParams.get('filter') as DateFilter) || 'all'
   );
-  const [customDateStart, setCustomDateStart] = useState<string>('');
-  const [customDateEnd, setCustomDateEnd] = useState<string>('');
-  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(() => {
-    return (localStorage.getItem('taskModeFilter') as any) || 'all';
-  });
+  const [customDateStart, setCustomDateStart] = useState('');
+  const [customDateEnd, setCustomDateEnd] = useState('');
+  const [modeFilter, setModeFilter] = useState<'all' | 'personal' | 'professional'>(
+    () => {
+      return (localStorage.getItem('taskModeFilter') as any) || 'all';
+    });
 
-  // Project state
-  const [projects, setProjects] = useState<Project[]>([]);
+  // Project state - keep selectedProjectId for task filtering
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
-  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
 
   useEffect(() => {
     const filterParam = searchParams.get('filter');
-    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom'].includes(filterParam)) {
+    if (filterParam && ['all', 'today', 'thisWeek', 'thisMonth', 'custom', 'upcoming', 'recurring', 'completed', 'trash', 'backlog'].includes(filterParam)) {
       setDateFilter(filterParam as any);
     }
   }, [searchParams]);
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    startDate: (() => {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    })(), // Default to today
-    startTime: '',
-    priority: 'medium' as 'low' | 'medium' | 'high',
-    tags: '',
-    isRepeating: false,
-    repeatFrequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-    repeatEndDate: '',
-    mode: 'personal' as 'personal' | 'professional'
-  });
 
   useEffect(() => {
     const auth = getAuth();
@@ -85,28 +82,12 @@ export default function Tasks() {
     }
   }, []);
 
-  // Subscribe to projects when user and modeFilter change
+  // Reset project selection when mode changes to 'all'
   useEffect(() => {
-    if (!user?.uid) return;
     if (modeFilter === 'all') {
       setSelectedProjectId(undefined);
-      setProjects([]);
-      return;
     }
-
-    const unsubscribe = projectService.subscribeToProjects(
-      user.uid,
-      (projectList) => {
-        setProjects(projectList);
-        if (projectList.length === 0) {
-          projectService.getOrCreateDefaultProject(user.uid, modeFilter as ProjectMode);
-        }
-      },
-      { filters: { mode: modeFilter as ProjectMode, isArchived: false } }
-    );
-
-    return () => unsubscribe();
-  }, [user?.uid, modeFilter]);
+  }, [modeFilter]);
 
   const loadTasks = async (userId: string) => {
     setLoading(true);
@@ -116,17 +97,14 @@ export default function Tasks() {
       const q = query(tasksRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
 
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const today = format(new Date(), 'yyyy-MM-dd');
 
       const loadedTasks: Task[] = [];
       querySnapshot.forEach((doc) => {
         const task = { id: doc.id, ...doc.data() } as Task;
 
-        // Filter out soft-deleted parent tasks
-        if (task.isDeleted) return;
-
-        // Filter out past incomplete recurring tasks (don't carry forward)
+        // Only skip if it's recurring and past incomplete (per requirements)
+        // But keep deleted tasks so they can be shown in Trash
         if (task.isRepeating && task.status !== 'completed' && !task.completed) {
           const taskDate = task.startDate?.split('T')[0];
           if (taskDate && taskDate < today) {
@@ -145,97 +123,20 @@ export default function Tasks() {
     }
   };
 
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Form submitted!', formData);
-
-    if (!user) {
-      console.error('No user found!');
-      alert('You must be logged in to create a task');
-      return;
-    }
-
-    try {
-      const db = getFirestore();
-
-      // Parse tags from comma-separated string
-      const tagArray = formData.tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
-
-      // Use today's date if startDate is not set
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const taskStartDate = formData.startDate || today;
-
-      const taskData = {
-        title: formData.title,
-        description: formData.description,
-        startDate: taskStartDate,
-        startTime: formData.startTime || null,
-        priority: formData.priority,
-        tags: tagArray,
-        isRepeating: formData.isRepeating,
-        repeatFrequency: formData.isRepeating ? formData.repeatFrequency : null,
-        repeatEndDate: formData.isRepeating ? formData.repeatEndDate : null,
-        status: 'todo',
-        userId: user.uid,
-        createdAt: Timestamp.now(),
-        mode: formData.mode || 'personal'
-      };
-
-      if (editingTask) {
-        // Update existing task
-        const taskRef = doc(db, 'tasks', editingTask.id);
-        await updateDoc(taskRef, taskData);
-        console.log('Task updated successfully');
-        alert('Task updated successfully!');
-      } else {
-        // Create new task
-        const tasksRef = collection(db, 'tasks');
-        const docRef = await addDoc(tasksRef, taskData);
-        console.log('Task created successfully with ID:', docRef.id);
-        alert('Task created successfully!');
+  // Handle edit param from URL (e.g. from Dashboard)
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && tasks.length > 0) {
+      const taskToEdit = tasks.find(t => t.id === editId);
+      if (taskToEdit) {
+        handleEditTask(taskToEdit);
+        // Clear param without reload
+        window.history.replaceState({}, '', window.location.pathname + (window.location.search.replace(/edit=[^&]*&?/, '').replace(/\?$/, '')));
       }
-
-      // Reset form
-      setFormData({
-        title: '',
-        description: '',
-        startDate: today, // Default to today
-        startTime: '',
-        priority: 'medium',
-        tags: '',
-        isRepeating: false,
-        repeatFrequency: 'daily',
-        repeatEndDate: '',
-        mode: 'personal'
-      });
-      setShowAddForm(false);
-      setEditingTask(null);
-
-      // Reload tasks
-      await loadTasks(user.uid);
-    } catch (error: any) {
-      console.error('Error saving task:', error);
-      alert(`Failed to save task: ${error.message}`);
     }
-  };
+  }, [searchParams, tasks]);
 
-  const handleQuickAddTask = async (taskData: {
-    title: string;
-    description: string;
-    startDate: string;
-    startTime: string;
-    priority: 'low' | 'medium' | 'high';
-    tags: string[];
-    isRepeating: boolean;
-    repeatFrequency: 'daily' | 'weekly' | 'monthly';
-    repeatEndDate: string;
-    mode: 'personal' | 'professional';
-    subtasks?: { id: string; title: string; completed: boolean }[];
-  }) => {
+  const handleAddTask = async (taskData: any) => {
     if (!user) {
       alert('You must be logged in to create a task');
       return;
@@ -245,26 +146,24 @@ export default function Tasks() {
       const db = getFirestore();
 
       const firestoreData = {
-        title: taskData.title,
-        description: taskData.description,
-        startDate: taskData.startDate,
-        startTime: taskData.startTime || null,
-        priority: taskData.priority,
-        tags: taskData.tags,
-        isRepeating: taskData.isRepeating,
-        repeatFrequency: taskData.isRepeating ? taskData.repeatFrequency : null,
-        repeatEndDate: taskData.isRepeating ? taskData.repeatEndDate : null,
-        status: 'todo',
+        ...taskData,
         userId: user.uid,
         createdAt: Timestamp.now(),
-        mode: taskData.mode || 'personal',
-        subtasks: taskData.subtasks || []
+        status: editingTask ? editingTask.status : 'todo',
+        subtasks: taskData.subtasks || null,
+        projectId: taskData.projectId || selectedProjectId || null,
+        deadlineDate: taskData.deadlineDate || null
       };
 
-      await addDoc(collection(db, 'tasks'), firestoreData);
-      setShowQuickAdd(false);
+      if (editingTask) {
+        const taskRef = doc(db, 'tasks', editingTask.id);
+        await updateDoc(taskRef, firestoreData);
+      } else {
+        await addDoc(collection(db, 'tasks'), firestoreData);
+      }
 
-      // Reload tasks
+      setShowAddForm(false);
+      setEditingTask(null);
       await loadTasks(user.uid);
     } catch (error: any) {
       console.error('Error saving task:', error);
@@ -272,29 +171,10 @@ export default function Tasks() {
     }
   };
 
+
   const handleEditTask = (task: Task) => {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
     setEditingTask(task);
-    setFormData({
-      title: task.title,
-      description: task.description || '',
-      startDate: task.startDate || today, // Default to today if not set
-      startTime: task.startTime || '',
-      priority: task.priority,
-      tags: task.tags ? task.tags.join(', ') : '',
-      isRepeating: task.isRepeating || false,
-      repeatFrequency: task.repeatFrequency || 'daily',
-      repeatEndDate: task.repeatEndDate || '',
-      mode: (task.mode as any) || 'personal'
-    });
     setShowAddForm(true);
-
-    // Scroll to form smoothly after a brief delay to allow React to render
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
   };
 
   const getNextOccurrenceDate = (currentDate: string, frequency: 'daily' | 'weekly' | 'monthly'): string => {
@@ -339,8 +219,7 @@ export default function Tasks() {
       // If task is being marked as complete and is repeating, create next occurrence
       if (newStatus === 'completed' && shouldCreateNextOccurrence(task)) {
         const nextDate = getNextOccurrenceDate(task.startDate, task.repeatFrequency!);
-        const now = new Date();
-        const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const today = format(new Date(), 'yyyy-MM-dd');
 
         // Only create if next occurrence is in the future or today
         if (nextDate >= today) {
@@ -447,9 +326,12 @@ export default function Tasks() {
           await deleteDoc(taskRef);
         }
       } else {
-        // Non-recurring task - just delete it
+        // Mark as deleted (soft delete)
         const taskRef = doc(db, 'tasks', taskId);
-        await deleteDoc(taskRef);
+        await updateDoc(taskRef, {
+          isDeleted: true,
+          deletedAt: Timestamp.now()
+        });
       }
 
       // Reload tasks
@@ -462,13 +344,72 @@ export default function Tasks() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleRestoreTask = async (taskId: string) => {
     try {
-      const auth = getAuth();
-      await signOut(auth);
-      navigate('/login');
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+
+      await updateDoc(taskRef, {
+        isDeleted: false,
+        deletedAt: deleteField()
+      });
+
+      if (user) loadTasks(user.uid);
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Error restoring task:', error);
+      alert('Failed to restore task');
+    }
+  };
+
+  const handleMoveToToday = async (taskId: string) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+      const now = new Date();
+      const today = format(now, 'yyyy-MM-dd');
+
+      await updateDoc(taskRef, {
+        startDate: today,
+        updatedAt: new Date()
+      });
+
+      if (user) loadTasks(user.uid);
+    } catch (error) {
+      console.error('Error moving task to today:', error);
+      alert('Failed to move task to today');
+    }
+  };
+
+  const handleIgnoreTask = async (taskId: string) => {
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+
+      await updateDoc(taskRef, {
+        ignored: true,
+        updatedAt: new Date()
+      });
+
+      if (user) loadTasks(user.uid);
+    } catch (error) {
+      console.error('Error ignoring task:', error);
+      alert('Failed to ignore task');
+    }
+  };
+
+  const handlePermanentDelete = async (taskId: string) => {
+    if (!window.confirm('Are you sure you want to delete this task forever?')) return;
+
+    try {
+      const db = getFirestore();
+      const taskRef = doc(db, 'tasks', taskId);
+
+      await deleteDoc(taskRef);
+
+      if (user) loadTasks(user.uid);
+    } catch (error) {
+      console.error('Error deleting task permanently:', error);
+      alert('Failed to delete task permanently');
     }
   };
 
@@ -482,32 +423,187 @@ export default function Tasks() {
     return dateStr;
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const TaskItem = ({ task }: { task: Task }) => {
+    const isTodayTask = task.startDate ? task.startDate.split('T')[0] === format(new Date(), 'yyyy-MM-dd') : false;
+
+    return (
+      <div className="py-1.5 hover:bg-gray-50 flex flex-col sm:flex-row items-center gap-3 w-full group transition-colors px-4 border-b border-gray-50 last:border-0 min-h-[48px]">
+        <div className="flex items-center gap-3 w-full">
+          {task.status === 'completed' ? (
+            <div className="h-4 w-4 min-w-[16px] flex items-center justify-center text-green-500 bg-green-50 rounded-full">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          ) : (
+            <input
+              type="checkbox"
+              checked={false}
+              onChange={() => handleToggleComplete(task)}
+              className="h-4 w-4 min-w-[16px] text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+            />
+          )}
+
+          {/* Mode Badge - Left of Title */}
+          <span className={clsx(
+            "px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border shrink-0",
+            (task.mode || 'personal') === 'personal'
+              ? 'border-blue-200 text-blue-600 bg-blue-50/30'
+              : 'border-orange-200 text-orange-600 bg-orange-50/30'
+          )}>
+            {(task.mode || 'personal') === 'personal' ? 'P' : 'W'}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3">
+              <h3 className={clsx(
+                "text-sm sm:text-base font-medium break-words truncate",
+                task.status === 'completed' ? "text-gray-400 line-through" : "text-gray-900"
+              )}>
+                {task.title}
+              </h3>
+
+              {/* Tags - Immediately after Title */}
+              {task.tags && task.tags.length > 0 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {task.tags.map((tag, index) => (
+                    <span key={index} className="px-1.5 py-0.25 border border-blue-200 text-blue-500 text-[9px] rounded-full font-medium whitespace-nowrap bg-blue-50/10">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {task.isRepeating && (
+                <span className="text-gray-400 shrink-0" title={`Repeats ${task.repeatFrequency}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </span>
+              )}
+
+              {task.status === 'completed' && task.completedAt && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-[10px] sm:text-xs text-gray-400 font-medium ml-2">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {format(task.completedAt instanceof Date ? task.completedAt : (task.completedAt as any).toDate ? (task.completedAt as any).toDate() : new Date(task.completedAt), 'MMM d')}
+                </span>
+              )}
+            </div>
+
+            {(task.description || (task.startDate && task.status !== 'completed' && !isTodayTask)) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+                {task.description && (
+                  <p className="text-xs text-gray-500 line-clamp-1 max-w-sm">
+                    {task.description}
+                  </p>
+                )}
+                {task.startDate && task.status !== 'completed' && !isTodayTask && (
+                  <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">
+                    {formatDateTime(task.startDate, task.startTime)}
+                  </span>
+                )}
+                {isTodayTask && task.startTime && (
+                  <span className="text-[10px] sm:text-xs text-blue-500 font-medium whitespace-nowrap">
+                    {task.startTime}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action buttons - always visible in trash, hover otherwise */}
+        <div className={clsx(
+          "flex items-center gap-2 transition-opacity ml-auto",
+          dateFilter !== 'trash' && "sm:opacity-0 group-hover:opacity-100"
+        )}>
+          {dateFilter === 'trash' ? (
+            <>
+              <button
+                onClick={() => handleRestoreTask(task.id)}
+                className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                title="Restore"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              <button
+                onClick={() => handlePermanentDelete(task.id)}
+                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                title="Delete Permanently"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              {(dateFilter === 'backlog' || (task.startDate && task.startDate.split('T')[0] < format(new Date(), 'yyyy-MM-dd') && !task.completed)) && (
+                <button
+                  onClick={() => handleMoveToToday(task.id)}
+                  className="p-1 px-2 text-[10px] font-bold text-blue-600 hover:bg-blue-50 rounded border border-blue-200 uppercase"
+                  title="Move to Today"
+                >
+                  Move to Today
+                </button>
+              )}
+              {dateFilter === 'backlog' && (
+                <button
+                  onClick={() => handleIgnoreTask(task.id)}
+                  className="p-1 px-2 text-[10px] font-bold text-gray-500 hover:bg-gray-50 rounded border border-gray-200 uppercase"
+                  title="Ignore"
+                >
+                  Ignore
+                </button>
+              )}
+              <button
+                onClick={() => handleEditTask(task)}
+                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                title="Edit"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => confirmDeleteTask(task.id)}
+                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                title="Delete"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 2 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
-  const getPriorityValue = (priority: string): number => {
-    switch (priority) {
-      case 'high': return 3;
-      case 'medium': return 2;
-      case 'low': return 1;
-      default: return 0;
-    }
-  };
+
 
   const getFilteredAndSortedTasks = (): Task[] => {
     // First, filter by status
     let filteredTasks = [...tasks];
 
-    if (statusFilter === 'active') {
-      filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
-    } else if (statusFilter === 'completed') {
-      filteredTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
+    if (dateFilter === 'trash') {
+      filteredTasks = filteredTasks.filter(t => t.isDeleted === true);
+    } else if (dateFilter === 'recurring') {
+      filteredTasks = filteredTasks.filter(t => t.isRepeating === true && !t.isDeleted);
+    } else if (statusFilter === 'active' || dateFilter === 'today' || dateFilter === 'thisWeek' || dateFilter === 'upcoming') {
+      filteredTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed && !t.isDeleted);
+    } else if (statusFilter === 'completed' || dateFilter === 'completed') {
+      filteredTasks = filteredTasks.filter(t => (t.status === 'completed' || t.completed) && !t.isDeleted);
+    } else if (dateFilter === 'backlog') {
+      filteredTasks = filteredTasks.filter(t => !t.startDate && t.status !== 'completed' && !t.completed && !t.isDeleted);
+    } else {
+      // Default: hide deleted
+      filteredTasks = filteredTasks.filter(t => !t.isDeleted);
     }
 
     // Filter by mode
@@ -527,10 +623,10 @@ export default function Tasks() {
 
     // Filter by date
     if (dateFilter !== 'all') {
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const today = format(new Date(), 'yyyy-MM-dd');
 
       filteredTasks = filteredTasks.filter(task => {
+        if (dateFilter === 'backlog') return !task.startDate;
         if (!task.startDate) return false;
         const taskDate = task.startDate.split('T')[0];
 
@@ -539,16 +635,34 @@ export default function Tasks() {
         } else if (dateFilter === 'thisWeek') {
           const taskDateObj = new Date(taskDate);
           const todayObj = new Date(today);
+          const currentDay = todayObj.getDay(); // 0 is Sunday, 1 is Monday...
+
+          const dayMap: Record<string, number> = {
+            'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+            'Thursday': 4, 'Friday': 5, 'Saturday': 6
+          };
+
+          const startDayNum = dayMap[startOfWeek] || 0;
+          const diff = (currentDay < startDayNum) ? (7 - startDayNum + currentDay) : (currentDay - startDayNum);
+
           const firstDayOfWeek = new Date(todayObj);
-          firstDayOfWeek.setDate(todayObj.getDate() - todayObj.getDay()); // Sunday
-          const lastDayOfWeek = new Date(todayObj);
-          lastDayOfWeek.setDate(todayObj.getDate() + (6 - todayObj.getDay())); // Saturday
+          firstDayOfWeek.setDate(todayObj.getDate() - diff);
+          firstDayOfWeek.setHours(0, 0, 0, 0);
+
+          const lastDayOfWeek = new Date(firstDayOfWeek);
+          lastDayOfWeek.setDate(firstDayOfWeek.getDate() + 6);
+          lastDayOfWeek.setHours(23, 59, 59, 999);
+
           return taskDateObj >= firstDayOfWeek && taskDateObj <= lastDayOfWeek;
         } else if (dateFilter === 'thisMonth') {
           const taskDateObj = new Date(taskDate);
           const todayObj = new Date(today);
           return taskDateObj.getMonth() === todayObj.getMonth() && taskDateObj.getFullYear() === todayObj.getFullYear();
-        } else if (dateFilter === 'custom') {
+        } else if (dateFilter === 'upcoming') {
+          // Show all future tasks EXCLUDING today
+          return taskDate > today;
+        }
+        else if (dateFilter === 'recurring') {
           if (customDateStart && taskDate < customDateStart) return false;
           if (customDateEnd && taskDate > customDateEnd) return false;
           return true;
@@ -561,55 +675,20 @@ export default function Tasks() {
     const completedTasks = filteredTasks.filter(t => t.status === 'completed' || t.completed);
     const activeTasks = filteredTasks.filter(t => t.status !== 'completed' && !t.completed);
 
-    // Sort active tasks based on selected sort option
-    let sortedActiveTasks: Task[] = [];
+    // Sort active tasks by time (which includes date)
+    const sortedActiveTasks = activeTasks.sort((a, b) => {
+      if (!a.startDate && !b.startDate) return 0;
+      if (!a.startDate) return 1;
+      if (!b.startDate) return -1;
 
-    switch (sortBy) {
-      case 'priority':
-        sortedActiveTasks = activeTasks.sort((a, b) => getPriorityValue(b.priority) - getPriorityValue(a.priority));
-        break;
+      const dateCompare = a.startDate.localeCompare(b.startDate);
+      if (dateCompare !== 0) return dateCompare;
 
-      case 'time':
-        sortedActiveTasks = activeTasks.sort((a, b) => {
-          if (!a.startDate && !b.startDate) return 0;
-          if (!a.startDate) return 1;
-          if (!b.startDate) return -1;
-
-          const dateCompare = a.startDate.localeCompare(b.startDate);
-          if (dateCompare !== 0) return dateCompare;
-
-          // If same date, sort by time
-          const timeA = a.startTime || '23:59';
-          const timeB = b.startTime || '23:59';
-          return timeA.localeCompare(timeB);
-        });
-        break;
-
-      case 'deadline':
-        sortedActiveTasks = activeTasks.sort((a, b) => {
-          // Tasks with dates come first, sorted by earliest date
-          if (!a.startDate && !b.startDate) return 0;
-          if (!a.startDate) return 1; // Tasks without dates go to end
-          if (!b.startDate) return -1;
-
-          return a.startDate.localeCompare(b.startDate); // Nearest date first
-        });
-        break;
-
-      case 'date':
-        sortedActiveTasks = activeTasks.sort((a, b) => {
-          // Sort by date (ascending - earliest first)
-          if (!a.startDate && !b.startDate) return 0;
-          if (!a.startDate) return 1; // Tasks without dates go to end
-          if (!b.startDate) return -1;
-
-          return a.startDate.localeCompare(b.startDate);
-        });
-        break;
-
-      default:
-        sortedActiveTasks = activeTasks;
-    }
+      // If same date, sort by time
+      const timeA = a.startTime || '23:59';
+      const timeB = b.startTime || '23:59';
+      return timeA.localeCompare(timeB);
+    });
 
     // Sort completed tasks by completion date (most recent first) or by same criteria
     const sortedCompletedTasks = completedTasks.sort((a, b) => {
@@ -621,8 +700,8 @@ export default function Tasks() {
         return new Date(bCompleted).getTime() - new Date(aCompleted).getTime();
       }
 
-      // Otherwise sort by priority
-      return getPriorityValue(b.priority) - getPriorityValue(a.priority);
+      // Otherwise keep current order
+      return 0;
     });
 
     // Return active tasks first, then completed tasks
@@ -633,534 +712,207 @@ export default function Tasks() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ... (Header) ... */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 sm:py-6 gap-3 sm:gap-0">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Tasks</h1>
-            </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <Link to="/" className="text-sm text-gray-600 hover:text-gray-900 text-center sm:text-left">
-                ← Back to Dashboard
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {/* Add Task Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingTask(null);
-              setFormData({
-                title: '',
-                description: '',
-                startDate: '',
-                startTime: '',
-                priority: 'medium',
-                tags: '',
-                isRepeating: false,
-                repeatFrequency: 'daily',
-                repeatEndDate: '',
-                mode: 'personal'
-              });
-            }}
-            className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-          >
-            {showAddForm ? '✕ Cancel' : '+ Add New Task'}
-          </button>
-        </div>
-
-        {/* Add/Edit Task Form */}
-        {showAddForm && (
-          <div ref={formRef} className="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {editingTask ? 'Edit Task' : 'Create New Task'}
-            </h2>
-            <form onSubmit={handleAddTask} className="space-y-4">
-              {/* ... (Form fields) ... */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Task Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter task title"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter task description"
-                />
-              </div>
-
-              {/* Start Date and Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="time"
-                      value={formData.startTime}
-                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Optional time"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Time is optional</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Priority
-                  </label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tags (comma-separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="work, urgent, meeting"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mode
-                  </label>
-                  <select
-                    value={formData.mode}
-                    onChange={(e) => setFormData({ ...formData, mode: e.target.value as 'personal' | 'professional' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="personal">🏠 Personal</option>
-                    <option value="professional">💼 Professional</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Repeating Task Section */}
-              <div className="border-t pt-4">
-                <div className="flex items-center mb-4">
-                  <input
-                    type="checkbox"
-                    id="isRepeating"
-                    checked={formData.isRepeating}
-                    onChange={(e) => setFormData({ ...formData, isRepeating: e.target.checked })}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="isRepeating" className="ml-2 block text-sm font-medium text-gray-700">
-                    🔄 Make this a repeating task
-                  </label>
-                </div>
-
-                {formData.isRepeating && (
-                  <div className="ml-6 space-y-3 bg-blue-50 p-4 rounded-md">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Repeat Frequency
-                        </label>
-                        <select
-                          value={formData.repeatFrequency}
-                          onChange={(e) => setFormData({ ...formData, repeatFrequency: e.target.value as any })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="monthly">Monthly</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Repeat Until (End Date)
-                        </label>
-                        <input
-                          type="date"
-                          value={formData.repeatEndDate}
-                          onChange={(e) => setFormData({ ...formData, repeatEndDate: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-600">
-                      This task will repeat {formData.repeatFrequency}
-                      {formData.repeatEndDate && ` until ${new Date(formData.repeatEndDate).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-                >
-                  {editingTask ? 'Update Task' : 'Create Task'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setEditingTask(null);
-                  }}
-                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 font-medium"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         {/* Tasks List */}
         <div className="bg-white rounded-lg shadow">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold mb-4">Your Tasks ({sortedTasks.length})</h2>
-
-            {/* Status Tabs */}
-            <div className="flex border-b border-gray-200 mb-4">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'all'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                All ({tasks.length})
-              </button>
-              <button
-                onClick={() => setStatusFilter('active')}
-                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'active'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                Active ({tasks.filter(t => t.status !== 'completed' && !t.completed).length})
-              </button>
-              <button
-                onClick={() => setStatusFilter('completed')}
-                className={`px-4 py-2 font-medium text-sm ${statusFilter === 'completed'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                Completed ({tasks.filter(t => t.status === 'completed' || t.completed).length})
-              </button>
-            </div>
-
-            {/* Mode Filter Tabs */}
-            <div className="flex border-b border-gray-200 mb-4">
-              <button
-                onClick={() => {
-                  setModeFilter('all');
-                  localStorage.setItem('taskModeFilter', 'all');
-                }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'all'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                All Modes
-              </button>
-              <button
-                onClick={() => {
-                  setModeFilter('personal');
-                  localStorage.setItem('taskModeFilter', 'personal');
-                }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'personal'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                🏠 Personal
-              </button>
-              <button
-                onClick={() => {
-                  setModeFilter('professional');
-                  localStorage.setItem('taskModeFilter', 'professional');
-                }}
-                className={`px-4 py-2 font-medium text-sm ${modeFilter === 'professional'
-                  ? 'border-b-2 border-green-600 text-green-600'
-                  : 'text-gray-600 hover:text-gray-900'
-                  }`}
-              >
-                💼 Professional
-              </button>
-            </div>
-
-            {/* Projects Filter */}
-            {modeFilter !== 'all' && projects.length > 0 && (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  onClick={() => setShowProjectsPanel(!showProjectsPanel)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                >
-                  <span>📁</span>
-                  <span className="font-medium">
-                    {selectedProjectId
-                      ? projects.find(p => p.id === selectedProjectId)?.name || 'Project'
-                      : 'All Projects'}
-                  </span>
-                  <svg className={`w-4 h-4 transition-transform ${showProjectsPanel ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <div className="p-4 sm:p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+              {dateFilter === 'today' ? (
+                <>
+                  <svg className="w-6 h-6 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
-                </button>
-                {selectedProjectId && (
+                  Today
+                </>
+              ) : dateFilter === 'completed' ? (
+                <>
+                  <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Completed
+                </>
+              ) : dateFilter === 'recurring' ? (
+                <>
+                  <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Recurring
+                </>
+              ) : dateFilter === 'backlog' ? (
+                <>
+                  <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Backlog ({sortedTasks.length})
+                </>
+              ) : dateFilter === 'trash' ? (
+                <>
+                  <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 2 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Trash
+                </>
+              ) : (
+                <>
+                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  {dateFilter === 'thisWeek' ? 'This Week' : dateFilter === 'thisMonth' ? 'This Month' : 'Upcoming'} ({sortedTasks.length})
+                </>
+              )}
+            </h2>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mt-6">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 flex-1">
+                {(['all', 'personal', 'professional'] as const).map((mode) => (
                   <button
-                    onClick={() => setSelectedProjectId(undefined)}
-                    className="text-xs text-gray-500 hover:text-gray-700"
+                    key={mode}
+                    onClick={() => {
+                      setModeFilter(mode);
+                      localStorage.setItem('taskModeFilter', mode);
+                    }}
+                    className={clsx(
+                      'px-4 py-1.5 text-xs font-semibold rounded-md transition-all whitespace-nowrap',
+                      modeFilter === mode
+                        ? 'bg-blue-50 text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    )}
                   >
-                    Clear filter
+                    {mode === 'professional' ? 'Work' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                   </button>
+                ))}
+
+                {dateFilter === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={customDateStart}
+                      onChange={(e) => setCustomDateStart(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={customDateEnd}
+                      onChange={(e) => setCustomDateEnd(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 )}
               </div>
-            )}
 
-            {showProjectsPanel && modeFilter !== 'all' && (
-              <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedProjectId(undefined);
-                      setShowProjectsPanel(false);
-                    }}
-                    className={`p-2 text-left text-sm rounded-md transition-colors ${!selectedProjectId
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'hover:bg-gray-100 text-gray-700'
-                      }`}
-                  >
-                    📋 All Projects
-                  </button>
-                  {projects.map(project => (
-                    <button
-                      key={project.id}
-                      onClick={() => {
-                        setSelectedProjectId(project.id);
-                        setShowProjectsPanel(false);
-                      }}
-                      className={`p-2 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${selectedProjectId === project.id
-                          ? 'bg-blue-100 text-blue-700 font-medium'
-                          : 'hover:bg-gray-100 text-gray-700'
-                        }`}
-                    >
-                      <span style={{ color: project.color }}>{project.icon}</span>
-                      <span className="truncate">{project.name}</span>
-                      <span className="ml-auto text-xs text-gray-400">{project.taskCount}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Filters and Sort */}
-            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
-              {/* Date Filter */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                <label className="text-sm font-medium text-gray-700">Date:</label>
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom')}
-                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Dates</option>
-                  <option value="today">Today</option>
-                  <option value="thisWeek">This Week</option>
-                  <option value="thisMonth">This Month</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-              </div>
-
-              {/* Custom Date Range */}
-              {dateFilter === 'custom' && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                  <input
-                    type="date"
-                    value={customDateStart}
-                    onChange={(e) => setCustomDateStart(e.target.value)}
-                    placeholder="Start Date"
-                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-gray-500 text-center sm:text-left">to</span>
-                  <input
-                    type="date"
-                    value={customDateEnd}
-                    onChange={(e) => setCustomDateEnd(e.target.value)}
-                    placeholder="End Date"
-                    className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-
-              {/* Sort Dropdown */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
-                <label className="text-sm font-medium text-gray-700">Sort by:</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'time' | 'deadline' | 'date')}
-                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="priority">Priority (High to Low)</option>
-                  <option value="date">Date (Earliest First)</option>
-                  <option value="time">Date & Time</option>
-                  <option value="deadline">Deadline (Nearest First)</option>
-                </select>
-              </div>
             </div>
           </div>
 
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading tasks...</div>
-          ) : tasks.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              No tasks yet. Click "Add New Task" to create one!
-            </div>
-          ) : sortedTasks.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              No tasks match the selected filter.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {sortedTasks.map((task) => (
-                <div key={task.id} className="p-3 sm:p-4 hover:bg-gray-50 flex flex-col sm:flex-row items-start gap-3">
-                  <div className="flex items-start gap-3 w-full">
-                    {/* Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={task.status === 'completed'}
-                      onChange={() => handleToggleComplete(task)}
-                      className="mt-1 h-5 w-5 min-w-[20px] text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                    />
+          <div className="divide-y divide-gray-100">
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">Loading tasks...</div>
+            ) : dateFilter === 'upcoming' ? (
+              /* Vertical Calendar Layout for Upcoming View */
+              <div className="divide-y divide-gray-100">
+                {(() => {
+                  const days = Array.from({ length: 7 }).map((_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + i);
+                    return d.toISOString().split('T')[0];
+                  });
 
-                    {/* Task Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h3 className={`text-sm sm:text-base font-medium break-words ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                          {task.title}
-                        </h3>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
-                        </span>
-                        {task.isRepeating && (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-800 whitespace-nowrap">
-                            🔄 {task.repeatFrequency}
-                          </span>
-                        )}
-                        {modeFilter === 'all' && (
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded whitespace-nowrap ${(task.mode || 'personal') === 'personal'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-orange-100 text-orange-800'
-                            }`}>
-                            {(task.mode || 'personal') === 'personal' ? '🏠 Personal' : '💼 Professional'}
-                          </span>
-                        )}
-                      </div>
+                  const todayStr = format(new Date(), 'yyyy-MM-dd');
 
-                      {task.description && (
-                        <p className={`text-xs sm:text-sm mb-1 break-words ${task.status === 'completed' ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {task.description}
-                        </p>
-                      )}
+                  return days.map((dateStr) => {
+                    const dateObj = new Date(dateStr);
+                    const dayNum = dateObj.getDate();
+                    const isToday = dateStr === todayStr;
+                    const dayName = isToday ? 'Today' : dateObj.toLocaleDateString(undefined, { weekday: 'long' });
+                    const tasksForDay = sortedTasks.filter(t => t.startDate?.split('T')[0] === dateStr);
 
-                      <div className="flex flex-wrap gap-2 sm:gap-3 text-xs text-gray-500 mb-1">
-                        {task.startDate && (
-                          <span className="whitespace-nowrap">
-                            📅 {formatDateTime(task.startDate, task.startTime)}
-                          </span>
-                        )}
-                        {task.isRepeating && task.repeatEndDate && (
-                          <span className="whitespace-nowrap">
-                            🔚 Until: {new Date(task.repeatEndDate).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-
-                      {task.tags && task.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {task.tags.map((tag, index) => (
-                            <span
-                              key={index}
-                              className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-800 rounded whitespace-nowrap"
-                            >
-                              #{tag}
-                            </span>
+                    return (
+                      <div key={dateStr} className="py-4">
+                        <div className="flex items-baseline gap-3 px-4 mb-3">
+                          <span className="text-3xl font-bold text-gray-900">{dayNum}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-500">{dayName}</span>
+                            <span className="text-xs text-gray-400">{dateObj.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
+                          </div>
+                        </div>
+                        <div className="divide-y divide-gray-50">
+                          {tasksForDay.map(task => (
+                            <TaskItem key={task.id} task={task} />
                           ))}
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            ) : dateFilter === 'completed' ? (
+              /* Logbook Layout for Completed View */
+              <div className="divide-y divide-gray-100">
+                {(() => {
+                  const groups: { [key: string]: Task[] } = {};
+                  const today = new Date();
+                  const todayStr = format(today, 'yyyy-MM-dd');
 
-                  {/* Action Buttons */}
-                  <div className="flex sm:flex-col gap-2 w-full sm:w-auto ml-8 sm:ml-0">
-                    <button
-                      onClick={() => handleEditTask(task)}
-                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => confirmDeleteTask(task.id)}
-                      className="flex-1 sm:flex-none px-3 py-1.5 sm:py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 whitespace-nowrap min-h-[44px] sm:min-h-0"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  sortedTasks.forEach(task => {
+                    let dateStr = todayStr;
+                    if (task.completedAt) {
+                      const completedDate = (task.completedAt as any).toDate ? (task.completedAt as any).toDate() : new Date(task.completedAt as any);
+                      dateStr = format(completedDate, 'yyyy-MM-dd');
+                    } else if (task.startDate) {
+                      dateStr = task.startDate.split('T')[0];
+                    }
+
+                    let groupLabel = '';
+                    const d = new Date(dateStr + 'T00:00:00');
+
+                    if (dateStr === todayStr) {
+                      groupLabel = 'Today';
+                    } else if (isYesterday(d)) {
+                      groupLabel = 'Yesterday';
+                    } else {
+                      groupLabel = format(d, 'MMMM yyyy');
+                    }
+
+                    if (!groups[groupLabel]) groups[groupLabel] = [];
+                    groups[groupLabel].push(task);
+                  });
+
+                  const order = ['Today', 'Yesterday'];
+
+                  return Object.entries(groups)
+                    .sort(([a], [b]) => {
+                      const idxA = order.indexOf(a);
+                      const idxB = order.indexOf(b);
+                      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                      if (idxA !== -1) return -1;
+                      if (idxB !== -1) return 1;
+                      return b.localeCompare(a);
+                    })
+                    .map(([label, tasks]) => (
+                      <div key={label} className="py-2 sm:py-4">
+                        <h3 className="px-4 text-lg font-bold text-gray-900 mb-2">{label}</h3>
+                        <div className="divide-y divide-gray-50">
+                          {tasks.map(task => (
+                            <TaskItem key={task.id} task={task} />
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                })()}
+              </div>
+            ) : sortedTasks.length === 0 ? (
+              <div className="p-12 text-center text-gray-500">
+                No tasks match the selected filter.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {sortedTasks.map((task) => (
+                  <TaskItem key={task.id} task={task} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1169,8 +921,8 @@ export default function Tasks() {
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmation({ show: false, taskId: null })}>
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Task</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete this task? This action cannot be undone.
+            <p className="text-gray-600 mb-6 font-medium">
+              Are you sure you want to delete this task?
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -1190,12 +942,11 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* Floating Quick Add Button */}
-      {!showQuickAdd && !showAddForm && (
+      {/* Floating Add Button */}
+      {!showAddForm && !showQuickAdd && (
         <button
-          onClick={() => setShowQuickAdd(true)}
-          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50"
-          title="Quick Add Task"
+          onClick={() => setShowAddForm(true)}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-200 flex items-center justify-center z-50"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1203,12 +954,21 @@ export default function Tasks() {
         </button>
       )}
 
-      {/* Quick Add Task Popup */}
-      <AddTaskInline
-        isOpen={showQuickAdd}
-        onSubmit={handleQuickAddTask}
-        onCancel={() => setShowQuickAdd(false)}
-      />
+      {/* Add Task / Edit Task Overlay */}
+      {(showAddForm || showQuickAdd) && (
+        <AddTaskInline
+          isOpen={showAddForm || showQuickAdd}
+          onSubmit={handleAddTask}
+          onCancel={() => {
+            setShowAddForm(false);
+            setShowQuickAdd(false);
+            setEditingTask(null);
+          }}
+          editingTask={editingTask}
+          userId={user?.uid}
+          modeFilter={modeFilter === 'all' ? undefined : modeFilter}
+        />
+      )}
     </div>
   );
-}
+};

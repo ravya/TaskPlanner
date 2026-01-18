@@ -24,7 +24,7 @@ import {
     Timestamp,
 } from 'firebase/firestore';
 
-import { db } from './config';
+import { db, auth } from './config';
 import type {
     Project,
     ProjectFormData,
@@ -83,7 +83,21 @@ class ProjectService {
         try {
             // Check project limit for the mode
             const existingProjects = await this.getProjects(userId, { filters: { mode: data.mode } });
-            if (existingProjects.length >= PROJECT_LIMITS.MAX_PROJECTS_PER_MODE) {
+
+            // Check verification status for limits
+            const currentUser = auth.currentUser;
+            const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+            const isVerified = currentUser?.emailVerified || isGoogleUser;
+
+            if (!isVerified) {
+                const totalProjects = await this.getProjects(userId);
+                if (totalProjects.length >= PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED) {
+                    throw new ProjectServiceError(
+                        `Unverified accounts are limited to ${PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED} projects. Please verify your email to create more.`,
+                        'PROJECT_LIMIT_EXCEEDED'
+                    );
+                }
+            } else if (existingProjects.length >= PROJECT_LIMITS.MAX_PROJECTS_PER_MODE) {
                 throw new ProjectServiceError(
                     `Maximum ${PROJECT_LIMITS.MAX_PROJECTS_PER_MODE} projects allowed per mode`,
                     'PROJECT_LIMIT_EXCEEDED'

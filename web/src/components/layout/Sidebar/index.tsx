@@ -3,29 +3,13 @@ import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../../store/slices/uiSlice';
 import Navigation from '../Navigation';
+import { Link } from 'react-router-dom';
 
 export interface SidebarProps {
   className?: string;
 }
 
-const sidebarVariants = {
-  open: {
-    x: 0,
-    transition: {
-      type: 'spring',
-      stiffness: 300,
-      damping: 30,
-    },
-  },
-  closed: {
-    x: '-100%',
-    transition: {
-      type: 'spring',
-      stiffness: 300,
-      damping: 30,
-    },
-  },
-};
+
 
 const backdropVariants = {
   open: { opacity: 1 },
@@ -33,11 +17,11 @@ const backdropVariants = {
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
-  const { 
-    sidebarOpen, 
-    sidebarCollapsed, 
-    setSidebarOpen, 
-    toggleSidebarCollapsed 
+  const {
+    sidebarOpen,
+    sidebarCollapsed,
+    setSidebarOpen,
+    toggleSidebarCollapsed
   } = useUIStore();
 
   const closeSidebar = () => {
@@ -69,11 +53,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <motion.aside
-        className={sidebarClasses}
-        variants={sidebarVariants}
-        initial="closed"
-        animate={sidebarOpen ? 'open' : 'closed'}
+      <aside
+        className={clsx(
+          sidebarClasses,
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        )}
       >
         {/* Sidebar header */}
         <div className={clsx(
@@ -81,11 +65,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
           sidebarCollapsed && 'lg:justify-center'
         )}>
           {!sidebarCollapsed && (
-            <h2 className="text-lg font-semibold text-gray-900">
-              Menu
-            </h2>
+            <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Home
+              </h2>
+            </Link>
           )}
-          
+
           <div className="flex items-center space-x-2">
             {/* Collapse toggle for desktop */}
             <button
@@ -93,13 +79,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
               className="hidden lg:flex p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <svg 
+              <svg
                 className={clsx(
                   'w-4 h-4 text-gray-600 transition-transform',
                   sidebarCollapsed && 'rotate-180'
                 )}
-                fill="none" 
-                stroke="currentColor" 
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -139,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    TaskFlow
+                    Home
                   </p>
                   <p className="text-xs text-gray-500 truncate">
                     v1.0.0
@@ -157,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className }) => {
             </div>
           )}
         </div>
-      </motion.aside>
+      </aside>
 
       {/* Sidebar spacer for desktop */}
       <div className={clsx(

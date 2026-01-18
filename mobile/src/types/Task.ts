@@ -3,6 +3,10 @@ export type TaskStatus = 'todo' | 'in_progress' | 'completed';
 export type TaskLabel = 'urgent' | 'important' | 'errand' | 'later' | 'habit' | 'none';
 export type TaskMode = 'home' | 'work';
 
+export const TASK_LIMITS = {
+    MAX_TASKS_UNVERIFIED: 20,
+} as const;
+
 // Default labels for the app
 export const DEFAULT_LABELS: { id: TaskLabel; name: string; color: string }[] = [
     { id: 'urgent', name: 'Urgent', color: '#EF4444' },
@@ -29,6 +33,7 @@ export interface Task {
     mode: TaskMode;
     tags: string[];
     dueDate: string; // YYYY-MM-DD format
+    deadlineDate?: string; // Flag icon (Deadline)
     startTime?: string;
     completed: boolean;
     isRepeating: boolean;
@@ -52,6 +57,7 @@ export interface TaskFormData {
     mode: TaskMode;
     tags?: string[];
     dueDate?: Date | string;
+    deadlineDate?: string;
     startTime?: string;
     isRepeating?: boolean;
     repeatFrequency?: 'daily' | 'weekly' | 'monthly';

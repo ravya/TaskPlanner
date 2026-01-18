@@ -32,9 +32,10 @@ export function DashboardScreen() {
     const { tasks, loading, refresh } = useTodayTasks(user?.uid);
     const { projects } = useProjects(user?.uid);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
+    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>(settings.defaultMode === 'personal' ? 'home' : (settings.defaultMode === 'professional' ? 'work' : 'all'));
     const [refreshing, setRefreshing] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
     const [editingTask, setEditingTask] = useState<Task | null>(null);
 
     const filteredTasks = tasks.filter((task) => {
@@ -161,14 +162,29 @@ export function DashboardScreen() {
 
             {/* Mode Filter - Home/Work */}
             <View style={styles.filterRow}>
-                {(['all', 'home', 'work'] as const).map((mode) => (
+                {(['personal', 'all', 'professional'] as const).map((mode) => (
                     <TouchableOpacity
                         key={mode}
-                        style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
-                        onPress={() => setModeFilter(mode)}
+                        style={[styles.filterChip, (modeFilter === mode || (modeFilter === 'home' && mode === 'personal') || (modeFilter === 'work' && mode === 'professional')) && styles.filterChipActive]}
+                        onPress={() => setModeFilter(mode === 'personal' ? 'home' : (mode === 'professional' ? 'work' : 'all'))}
                     >
-                        <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
-                            {mode === 'all' ? 'All' : mode === 'home' ? 'Home' : 'Work'}
+                        <Text style={[styles.filterText, (modeFilter === mode || (modeFilter === 'home' && mode === 'personal') || (modeFilter === 'work' && mode === 'professional')) && styles.filterTextActive]}>
+                            {mode === 'all' ? 'None' : mode === 'personal' ? 'Home Mode' : 'Work Mode'}
+                        </Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            {/* Status Filter */}
+            <View style={styles.statusFilterRow}>
+                {(['active', 'completed', 'all'] as const).map((status) => (
+                    <TouchableOpacity
+                        key={status}
+                        style={[styles.statusFilterChip, statusFilter === status && styles.statusFilterActive]}
+                        onPress={() => setStatusFilter(status)}
+                    >
+                        <Text style={[styles.statusFilterText, statusFilter === status && styles.statusFilterTextActive]}>
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -194,7 +210,7 @@ export function DashboardScreen() {
 
             {/* Task List */}
             <FlatList
-                data={[...incompleteTasks, ...completedTasks]}
+                data={statusFilter === 'active' ? incompleteTasks : (statusFilter === 'completed' ? completedTasks : [...incompleteTasks, ...completedTasks])}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <TaskCard
@@ -318,6 +334,33 @@ const styles = StyleSheet.create({
     },
     filterTextActive: {
         color: colors.textInverse,
+        fontWeight: '600' as const,
+    },
+    statusFilterRow: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    statusFilterChip: {
+        flex: 1,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceSecondary,
+        alignItems: 'center',
+    },
+    statusFilterActive: {
+        backgroundColor: colors.primary + '20', // Light primary
+        borderWidth: 1,
+        borderColor: colors.primary,
+    },
+    statusFilterText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    statusFilterTextActive: {
+        color: colors.primary,
         fontWeight: '600' as const,
     },
     toolbar: {

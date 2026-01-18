@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
-    FlatList,
+    SectionList,
     TouchableOpacity,
     StyleSheet,
     RefreshControl,
@@ -24,26 +24,78 @@ import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { toggleTaskComplete, bulkToggleComplete, deleteTask, updateTask } from '../services/firebase';
 import { Task, TaskMode, TaskLabel, DEFAULT_LABELS } from '../types';
 
-export function TasksScreen() {
+export function TasksScreen(props: any) {
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const { settings } = useSettings();
     const { projects } = useProjects(user?.uid);
-    const { tasks, loading, refresh } = useTasks(user?.uid, { includeCompleted: true, realtime: true });
+    // Get filter params from navigation
+    const route = React.useMemo(() => (props as any)?.route, [props]);
+    const filterType = route?.params?.filterType;
+    const routeProjectId = route?.params?.projectId;
+    const pageTitle = route?.params?.title || 'Tasks';
+
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>('all');
+    const [modeFilter, setModeFilter] = useState<TaskMode | 'all'>(settings.defaultMode === 'personal' ? 'home' : (settings.defaultMode === 'professional' ? 'work' : 'all'));
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
+    const [selectedDate, setSelectedDate] = useState<string>(() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+    });
+
+    const { tasks, loading, refresh } = useTasks(user?.uid, {
+        includeCompleted: statusFilter === 'all' || statusFilter === 'completed',
+        realtime: true,
+        filterType,
+        projectId: routeProjectId,
+        mode: modeFilter === 'all' ? undefined : modeFilter
+    });
 
     const filteredTasks = tasks.filter((task) => {
-        if (modeFilter !== 'all' && task.mode !== modeFilter) return false;
         if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (statusFilter === 'active' && task.completed) return false;
+        if (statusFilter === 'completed' && !task.completed) return false;
+        if (filterType === 'upcoming') {
+            const taskDate = (task as any).dueDate || (task as any).startDate;
+            return taskDate === selectedDate;
+        }
         return true;
     });
 
     const isMultiSelectMode = selectedIds.size > 0;
+    // Explicitly check for mode toggle visibility - it should always be visible except in multi-select
+    const showModeToggle = !isMultiSelectMode;
+
+    const groupedTasks = React.useMemo(() => {
+        if (filterType === 'upcoming') {
+            return [{ title: selectedDate, data: filteredTasks }];
+        }
+
+        const groups: { title: string; data: Task[] }[] = [];
+
+        // Add tasks with no project first
+        const noProjectTasks = filteredTasks.filter((t: Task) => !t.projectId);
+        if (noProjectTasks.length > 0) {
+            groups.push({ title: 'No Project', data: noProjectTasks });
+        }
+
+        // Group by projects
+        projects.forEach((project) => {
+            const projectTasks = filteredTasks.filter((t: Task) => t.projectId === project.id);
+            if (projectTasks.length > 0) {
+                groups.push({ title: project.name, data: projectTasks });
+            }
+        });
+
+        return groups;
+    }, [filteredTasks, projects, filterType]);
+
+
 
     const handleLongPress = useCallback((taskId: string) => {
         setSelectedIds((prev) => {
@@ -114,7 +166,7 @@ export function TasksScreen() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.title}>Tasks</Text>
+                <Text style={styles.title}>{pageTitle}</Text>
                 <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
                     <Text style={styles.addButtonText}>+ Add</Text>
                 </TouchableOpacity>
@@ -132,19 +184,68 @@ export function TasksScreen() {
             </View>
 
             {/* Mode Filter - Home/Work */}
-            <View style={styles.filterRow}>
-                {(['all', 'home', 'work'] as const).map((mode) => (
+            {showModeToggle && (
+                <View style={styles.filterRow}>
+                    {(['home', 'all', 'work'] as const).map((mode) => (
+                        <TouchableOpacity
+                            key={mode}
+                            style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
+                            onPress={() => setModeFilter(mode)}
+                        >
+                            <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
+                                {mode === 'all' ? 'None' : mode === 'home' ? 'Home Mode' : 'Work Mode'}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
+
+            {/* Status Filter */}
+            <View style={styles.statusFilterRow}>
+                {(['active', 'completed', 'all'] as const).map((status) => (
                     <TouchableOpacity
-                        key={mode}
-                        style={[styles.filterChip, modeFilter === mode && styles.filterChipActive]}
-                        onPress={() => setModeFilter(mode)}
+                        key={status}
+                        style={[styles.statusFilterChip, statusFilter === status && styles.statusFilterActive]}
+                        onPress={() => setStatusFilter(status)}
                     >
-                        <Text style={[styles.filterText, modeFilter === mode && styles.filterTextActive]}>
-                            {mode === 'all' ? 'All' : mode === 'home' ? 'Home' : 'Work'}
+                        <Text style={[styles.statusFilterText, statusFilter === status && styles.statusFilterTextActive]}>
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
                         </Text>
                     </TouchableOpacity>
                 ))}
             </View>
+
+            {/* Upcoming Calendar Header */}
+            {filterType === 'upcoming' && (
+                <View style={styles.calendarContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.calendarScroller}>
+                        {Array.from({ length: 14 }).map((_, i) => {
+                            const date = new Date();
+                            date.setDate(date.getDate() + i + 1); // Starting from tomorrow
+                            const dateStr = date.toISOString().split('T')[0];
+                            const isSelected = selectedDate === dateStr;
+
+                            return (
+                                <TouchableOpacity
+                                    key={dateStr}
+                                    style={[styles.calendarDay, isSelected && styles.calendarDayActive]}
+                                    onPress={() => setSelectedDate(dateStr)}
+                                >
+                                    <Text style={[styles.calendarDayName, isSelected && styles.calendarTextActive]}>
+                                        {date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}
+                                    </Text>
+                                    <Text style={[styles.calendarDayNumber, isSelected && styles.calendarTextActive]}>
+                                        {date.getDate()}
+                                    </Text>
+                                    <Text style={[styles.calendarMonth, isSelected && styles.calendarTextActive]}>
+                                        {date.toLocaleDateString(undefined, { month: 'short' })}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </ScrollView>
+                </View>
+            )}
 
             {/* Multi-select toolbar - Icons only */}
             {isMultiSelectMode && (
@@ -165,8 +266,8 @@ export function TasksScreen() {
             )}
 
             {/* Task List */}
-            <FlatList
-                data={filteredTasks}
+            <SectionList
+                sections={groupedTasks}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                     <TaskCard
@@ -177,10 +278,28 @@ export function TasksScreen() {
                         onToggleComplete={() => handleToggleComplete(item)}
                     />
                 )}
+                renderSectionHeader={({ section: { title } }) => {
+                    if (filterType === 'upcoming') {
+                        return null; // We use the calendar header instead
+                    }
+                    return title === 'No Project' ? null : (
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>{title}</Text>
+                        </View>
+                    );
+                }}
                 contentContainerStyle={styles.listContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
-                    <EmptyState icon="checkbox-outline" title="No tasks" subtitle="Tap + Add to create a task" />
+                    filterType === 'upcoming' ? (
+                        <View style={styles.emptyCalendar}>
+                            <Ionicons name="calendar-outline" size={64} color={colors.border} />
+                            <Text style={styles.emptyCalendarTitle}>Empty Calendar</Text>
+                            <Text style={styles.emptyCalendarSubtitle}>No tasks for this date</Text>
+                        </View>
+                    ) : (
+                        <EmptyState icon="checkbox-outline" title="No tasks" subtitle="Tap + Add to create a task" />
+                    )
                 }
             />
 
@@ -191,6 +310,7 @@ export function TasksScreen() {
                 userId={user?.uid || null}
                 projects={projects}
                 defaultMode={settings.defaultMode === 'personal' ? 'home' : 'work'}
+                initialProjectId={routeProjectId}
             />
 
             {/* Edit Task Modal */}
@@ -273,6 +393,33 @@ const styles = StyleSheet.create({
         color: colors.textInverse,
         fontWeight: '600' as const,
     },
+    statusFilterRow: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    statusFilterChip: {
+        flex: 1,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.surfaceSecondary,
+        alignItems: 'center',
+    },
+    statusFilterActive: {
+        backgroundColor: colors.primary + '20', // Light primary
+        borderWidth: 1,
+        borderColor: colors.primary,
+    },
+    statusFilterText: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textSecondary,
+    },
+    statusFilterTextActive: {
+        color: colors.primary,
+        fontWeight: '600' as const,
+    },
     toolbar: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -308,5 +455,116 @@ const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.xl,
+    },
+    sectionHeader: {
+        backgroundColor: colors.background,
+        paddingVertical: spacing.sm,
+        marginBottom: spacing.xs,
+    },
+    sectionTitle: {
+        fontSize: fontSizes.bodySmall,
+        fontWeight: '700' as const,
+        color: colors.primary,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    dateHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        paddingVertical: spacing.md,
+        gap: spacing.md,
+    },
+    dateBadge: {
+        width: 50,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dateNumber: {
+        fontSize: 24,
+        fontWeight: '800' as const,
+        color: colors.textPrimary,
+        lineHeight: 28,
+    },
+    dayName: {
+        fontSize: 10,
+        fontWeight: '700' as const,
+        color: colors.textTertiary,
+        letterSpacing: 1,
+    },
+    dateInfo: {
+        justifyContent: 'center',
+    },
+    monthName: {
+        fontSize: fontSizes.bodySmall,
+        fontWeight: '700' as const,
+        color: colors.textPrimary,
+    },
+    yearName: {
+        fontSize: 10,
+        color: colors.textTertiary,
+    },
+    headerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.borderLight,
+        marginLeft: spacing.sm,
+    },
+    calendarContainer: {
+        backgroundColor: colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.borderLight,
+        paddingVertical: spacing.md,
+    },
+    calendarScroller: {
+        paddingHorizontal: spacing.lg,
+    },
+    calendarDay: {
+        width: 60,
+        height: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: borderRadius.md,
+        marginRight: spacing.sm,
+        backgroundColor: colors.surfaceSecondary,
+    },
+    calendarDayActive: {
+        backgroundColor: colors.primary,
+    },
+    calendarDayName: {
+        fontSize: 10,
+        fontWeight: '700' as const,
+        color: colors.textTertiary,
+        marginBottom: 4,
+    },
+    calendarDayNumber: {
+        fontSize: 18,
+        fontWeight: '800' as const,
+        color: colors.textPrimary,
+    },
+    calendarMonth: {
+        fontSize: 10,
+        color: colors.textTertiary,
+        marginTop: 2,
+    },
+    calendarTextActive: {
+        color: colors.textInverse,
+    },
+    emptyCalendar: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.xxl * 2,
+    },
+    emptyCalendarTitle: {
+        fontSize: fontSizes.h3,
+        fontWeight: '700' as const,
+        color: colors.textSecondary,
+        marginTop: spacing.md,
+    },
+    emptyCalendarSubtitle: {
+        fontSize: fontSizes.bodySmall,
+        color: colors.textTertiary,
+        marginTop: spacing.xs,
     },
 });

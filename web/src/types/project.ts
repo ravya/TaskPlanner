@@ -76,6 +76,7 @@ export interface ProjectStatistics {
 // Configurable limits
 export const PROJECT_LIMITS = {
     MAX_PROJECTS_PER_MODE: 10,
+    MAX_PROJECTS_UNVERIFIED: 3,
     DEFAULT_PROJECT_NAME: 'Inbox',
     MAX_PROJECT_NAME_LENGTH: 50,
     MAX_PROJECT_DESCRIPTION_LENGTH: 500,

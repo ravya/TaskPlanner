@@ -2,22 +2,27 @@ import React, { useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Sidebar } from './Sidebar';
 
 import { useAuth } from '../hooks';
 import {
     DashboardScreen,
     TasksScreen,
-    ProjectsScreen,
     AnalyticsScreen,
     SettingsScreen,
+    HelpSupportScreen,
+    StickiesScreen,
     LoginScreen,
     RegisterScreen,
 } from '../screens';
 import { colors, spacing } from '../styles/theme';
+import { cleanupTrash } from '../services/firebase';
 
 const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
 // Tab icons using Ionicons: outline when inactive, filled when active
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
@@ -45,19 +50,51 @@ function MainTabs() {
                 tabBarInactiveTintColor: colors.textTertiary,
                 tabBarStyle: styles.tabBar,
                 tabBarLabelStyle: styles.tabLabel,
-                headerShown: false,
+                headerShown: true,
+                headerLeft: () => (
+                    <Ionicons
+                        name="menu"
+                        size={24}
+                        color={colors.primary}
+                        style={{ marginLeft: spacing.md }}
+                        onPress={() => (global as any).navigation?.openDrawer()}
+                    />
+                ),
             })}
         >
             <Tab.Screen
                 name="Dashboard"
                 component={DashboardScreen}
-                options={{ tabBarLabel: 'Today' }}
+                options={{ tabBarLabel: 'Today', headerTitle: 'Today' }}
             />
             <Tab.Screen name="Tasks" component={TasksScreen} />
-            <Tab.Screen name="Projects" component={ProjectsScreen} />
             <Tab.Screen name="Analytics" component={AnalyticsScreen} />
             <Tab.Screen name="Settings" component={SettingsScreen} />
         </Tab.Navigator>
+    );
+}
+
+function MainApp() {
+    return (
+        <Drawer.Navigator
+            drawerContent={(props) => <Sidebar {...props} />}
+            screenOptions={{
+                headerShown: false,
+                drawerType: 'front',
+            }}
+        >
+            <Drawer.Screen name="MainTabs" component={MainTabs} />
+            <Drawer.Screen
+                name="HelpSupport"
+                component={HelpSupportScreen}
+                options={{ headerShown: true, headerTitle: 'Help & Support' }}
+            />
+            <Drawer.Screen
+                name="Stickies"
+                component={StickiesScreen}
+                options={{ headerShown: true, headerTitle: '' }}
+            />
+        </Drawer.Navigator>
     );
 }
 
@@ -73,6 +110,12 @@ function AuthScreens() {
 export function AppNavigator() {
     const { user, loading } = useAuth();
 
+    React.useEffect(() => {
+        if (user) {
+            cleanupTrash(user.uid).catch(console.error);
+        }
+    }, [user]);
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -83,8 +126,8 @@ export function AppNavigator() {
 
     return (
         <SafeAreaProvider>
-            <NavigationContainer>
-                {user ? <MainTabs /> : <AuthScreens />}
+            <NavigationContainer ref={(ref) => { (global as any).navigation = ref; }}>
+                {user ? <MainApp /> : <AuthScreens />}
             </NavigationContainer>
         </SafeAreaProvider>
     );

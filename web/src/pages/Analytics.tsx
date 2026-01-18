@@ -27,6 +27,7 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
 
   const [timeRange, setTimeRange] = useState<'week' | 'month' | '3months'>('week');
+  const [viewOption, setViewOption] = useState<'count' | 'rate'>('count');
 
   useEffect(() => {
     const auth = getAuth();
@@ -298,56 +299,112 @@ export default function Analytics() {
 
             {/* Daily Completion Graph */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-6">Daily Task Completion</h2>
-
-              <div className="space-y-3">
-                {dailyStats.map((day) => (
-                  <div key={day.date} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-gray-700">{formatDate(day.date)}</span>
-                      <span className="text-gray-600">
-                        {day.completed}/{day.total} tasks ({Math.round(day.completionRate)}%)
-                      </span>
-                    </div>
-
-                    <div className="relative h-8 bg-gray-100 rounded-full overflow-hidden">
-                      {/* Total tasks bar (light blue) */}
-                      <div
-                        className="absolute top-0 left-0 h-full bg-blue-200"
-                        style={{ width: `${(day.total / maxTasks) * 100}%` }}
-                      ></div>
-
-                      {/* Completed tasks bar (dark blue) */}
-                      <div
-                        className="absolute top-0 left-0 h-full bg-blue-600"
-                        style={{ width: `${(day.completed / maxTasks) * 100}%` }}
-                      ></div>
-
-                      {/* Labels */}
-                      {day.total > 0 && (
-                        <div className="absolute inset-0 flex items-center justify-between px-3">
-                          <span className="text-xs font-medium text-white">
-                            {day.completed > 0 && `✓ ${day.completed}`}
-                          </span>
-                          <span className="text-xs font-medium text-gray-700">
-                            {day.total} total
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Task Activity</h2>
+                  <p className="text-sm text-gray-500">Distribution of tasks over time</p>
+                </div>
+                <div className="flex bg-gray-100 p-1 rounded-lg self-stretch sm:self-auto">
+                  <button
+                    onClick={() => setViewOption('count')}
+                    className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all ${viewOption === 'count' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Task Count
+                  </button>
+                  <button
+                    onClick={() => setViewOption('rate')}
+                    className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all ${viewOption === 'rate' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Completion %
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-600 rounded"></div>
-                  <span className="text-gray-600">Completed Tasks</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-200 rounded"></div>
-                  <span className="text-gray-600">Total Tasks</span>
-                </div>
+              <div className="relative h-72 flex items-end gap-1.5 sm:gap-3 mb-4 min-w-[300px] overflow-x-auto pb-10 pt-4 scrollbar-hide px-2">
+                {/* Y-axis line (subtle) */}
+                <div className="absolute left-0 top-4 bottom-10 w-[1px] bg-gray-200"></div>
+
+                {/* X-axis line */}
+                <div className="absolute left-0 right-0 bottom-10 h-[1px] bg-gray-300"></div>
+                {dailyStats.map((stat, index) => {
+                  const maxVal = viewOption === 'count' ? Math.max(maxTasks, 5) : 100;
+                  const currentVal = viewOption === 'count' ? stat.total : stat.completionRate;
+                  const heightPercentage = (currentVal / maxVal) * 100;
+
+                  return (
+                    <div key={index} className="flex-1 min-w-[14px] flex flex-col items-center gap-0 group relative h-full">
+                      {/* Bar Container */}
+                      <div className="w-full flex flex-col justify-end bg-transparent overflow-hidden h-full group-hover:bg-gray-50/50 transition-colors pb-[1px]">
+                        <div className="w-full flex flex-col justify-end bg-gray-50 rounded-t-lg overflow-hidden h-full border-x border-t border-gray-100/50">
+                          {viewOption === 'count' ? (
+                            <>
+                              {/* Completed part */}
+                              <div
+                                className="bg-blue-600 transition-all duration-700 ease-out"
+                                style={{ height: `${(stat.completed / maxVal) * 100}%` }}
+                              />
+                              {/* Pending part */}
+                              <div
+                                className="bg-blue-200 transition-all duration-700 ease-out"
+                                style={{ height: `${((stat.total - stat.completed) / maxVal) * 100}%` }}
+                              />
+                            </>
+                          ) : (
+                            <div
+                              className="bg-indigo-500 rounded-t-lg transition-all duration-700 ease-out"
+                              style={{ height: `${heightPercentage}%` }}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tick mark */}
+                      <div className="w-[1px] h-2 bg-gray-300 mb-1"></div>
+
+                      {/* Date Label */}
+                      <div className="absolute -bottom-6 text-[10px] text-gray-500 font-bold whitespace-nowrap rotate-45 origin-left">
+                        {formatDate(stat.date)}
+                      </div>
+
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full mb-2 hidden group-hover:block z-20 pointer-events-none">
+                        <div className="bg-gray-900/95 backdrop-blur-sm text-white text-[10px] py-2 px-3 rounded-lg shadow-xl whitespace-nowrap border border-white/10">
+                          <div className="font-bold border-b border-white/10 pb-1 mb-1">{formatDate(stat.date)}</div>
+                          {viewOption === 'count' ? (
+                            <>
+                              <div className="flex justify-between gap-4"><span>Total:</span> <span className="font-bold">{stat.total}</span></div>
+                              <div className="flex justify-between gap-4 text-green-400"><span>Done:</span> <span className="font-bold">{stat.completed}</span></div>
+                              <div className="flex justify-between gap-4 text-blue-300"><span>Left:</span> <span className="font-bold">{stat.total - stat.completed}</span></div>
+                            </>
+                          ) : (
+                            <div className="text-center font-bold text-lg">{Math.round(stat.completionRate)}%</div>
+                          )}
+                        </div>
+                        <div className="w-2 h-2 bg-gray-900 rotate-45 mx-auto -mt-1"></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                {viewOption === 'count' ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-600 rounded-sm shadow-sm"></div>
+                      <span>Completed</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-200 rounded-sm shadow-sm"></div>
+                      <span>Remaining</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-indigo-500 rounded-sm shadow-sm"></div>
+                    <span>Success Rate %</span>
+                  </div>
+                )}
               </div>
             </div>
 

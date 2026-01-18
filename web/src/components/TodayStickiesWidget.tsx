@@ -171,9 +171,8 @@ export default function TodayStickiesWidget() {
                 if (a.position !== undefined && b.position !== undefined) {
                     return a.position - b.position;
                 }
-                // Fallback to priority
-                const priorityValue = { high: 3, medium: 2, low: 1 };
-                return priorityValue[b.priority] - priorityValue[a.priority];
+                // Otherwise keep current order
+                return 0;
             });
 
             setTasks(sortedTasks);
@@ -329,14 +328,6 @@ export default function TodayStickiesWidget() {
         });
     };
 
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'high': return 'border-l-red-400';
-            case 'medium': return 'border-l-yellow-400';
-            case 'low': return 'border-l-green-400';
-            default: return 'border-l-gray-400';
-        }
-    };
 
     // Multi-select handlers
     const toggleTaskSelection = (taskId: string) => {
@@ -553,7 +544,7 @@ export default function TodayStickiesWidget() {
         return (
             <div key={task.id} className="space-y-1">
                 <div
-                    className={`bg-white rounded-md p-2 shadow-sm border-l-4 ${isCompleted ? 'border-l-gray-300 opacity-60' : getPriorityColor(task.priority)} hover:shadow-md transition-shadow`}
+                    className={`bg-white rounded-md p-2 shadow-sm border-l-4 ${isCompleted ? 'border-l-gray-300 opacity-60' : 'border-l-yellow-400'} hover:shadow-md transition-shadow`}
                 >
                     <div className="flex items-center gap-2">
                         {/* Drag handle - only for incomplete tasks */}
@@ -741,7 +732,7 @@ export default function TodayStickiesWidget() {
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                         <h2 className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'Comic Sans MS, cursive' }}>
-                            📝 Today's Tasks
+                            Today's Tasks
                         </h2>
                         <button
                             onClick={() => userId && loadTodaysTasks(userId)}
@@ -775,7 +766,7 @@ export default function TodayStickiesWidget() {
                                     : 'bg-yellow-200 text-gray-600 hover:bg-yellow-300'
                                     }`}
                             >
-                                {mode === 'all' ? '📋 All' : mode === 'personal' ? '🏠 Personal' : '💼 Work'}
+                                {mode === 'all' ? 'All' : mode === 'personal' ? 'Personal' : 'Work'}
                             </button>
                         ))}
                     </div>
@@ -792,7 +783,7 @@ export default function TodayStickiesWidget() {
                                 : 'bg-yellow-200 text-gray-600 hover:bg-yellow-300'
                                 }`}
                         >
-                            {selectMode ? '✕ Cancel' : '☑ Select'}
+                            {selectMode ? 'Cancel' : 'Select'}
                         </button>
 
                         {selectMode && selectedTasks.size > 0 && (
@@ -816,19 +807,19 @@ export default function TodayStickiesWidget() {
                                     onClick={() => setShowDatePicker(!showDatePicker)}
                                     className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded"
                                 >
-                                    📅 Move
+                                    Move
                                 </button>
                                 <button
                                     onClick={() => handleBulkChangeMode('personal')}
                                     className="px-2 py-1 text-xs bg-blue-400 hover:bg-blue-500 text-white rounded"
                                 >
-                                    🏠 Personal
+                                    Personal
                                 </button>
                                 <button
                                     onClick={() => handleBulkChangeMode('professional')}
                                     className="px-2 py-1 text-xs bg-purple-500 hover:bg-purple-600 text-white rounded"
                                 >
-                                    💼 Work
+                                    Work
                                 </button>
                                 <button
                                     onClick={selectAllTasks}
@@ -897,7 +888,7 @@ export default function TodayStickiesWidget() {
                                                 {projectNames.length > 1 && (
                                                     <div className="flex items-center gap-1 py-1 px-1 mt-2 mb-1 border-b border-yellow-300">
                                                         <span className="text-xs font-semibold text-gray-600" style={{ fontFamily: 'Comic Sans MS, cursive' }}>
-                                                            📁 {projectName}
+                                                            {projectName}
                                                         </span>
                                                         <span className="text-xs text-gray-400">({grouped[projectName].length})</span>
                                                     </div>

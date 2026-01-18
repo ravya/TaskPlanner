@@ -79,13 +79,6 @@ export default function StickiesDemo() {
                                     </div>
                                 </li>
 
-                                <li className="flex items-start gap-3">
-                                    <span className="text-2xl">🎨</span>
-                                    <div>
-                                        <h3 className="font-semibold text-gray-800">Priority Colors</h3>
-                                        <p className="text-sm text-gray-600">Red for high priority, yellow for medium, green for low</p>
-                                    </div>
-                                </li>
 
                                 <li className="flex items-start gap-3">
                                     <span className="text-2xl">📊</span>

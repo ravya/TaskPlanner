@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { useAuthStore } from './store/slices/authSlice';
 
 // Pages
 import { lazy, Suspense } from 'react';
@@ -13,6 +14,8 @@ const StickiesDemo = lazy(() => import('./pages/StickiesDemo'));
 const WidgetOnly = lazy(() => import('./pages/WidgetOnly'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const HelpSupport = lazy(() => import('./pages/HelpSupport'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 import AppLayout from './components/layout/AppLayout';
 
@@ -39,20 +42,34 @@ function AuthLayoutWrapper() {
 
 // Protected Route Wrapper
 function ProtectedRouteWrapper() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, setUser, setLoading } = useAuthStore();
+  const [localLoading, setLocalLoading] = useState(true);
 
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser) {
+        // Handle UserProfile type conversion
+        const profile = {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName,
+          photoURL: currentUser.photoURL,
+          emailVerified: currentUser.emailVerified,
+          providerId: currentUser.providerData[0]?.providerId
+        };
+        setUser(profile as any);
+      } else {
+        setUser(null);
+      }
+      setLocalLoading(false);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [setUser, setLoading]);
 
-  if (loading) {
+  if (localLoading) {
     return <LoadingScreen />;
   }
 
@@ -87,6 +104,8 @@ function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/widget" element={<Widget />} />
           <Route path="/stickies" element={<StickiesDemo />} />
+          <Route path="/help" element={<HelpSupport />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
 
         {/* Fallback */}

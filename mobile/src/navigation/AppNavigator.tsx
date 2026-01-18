@@ -13,6 +13,8 @@ import {
     TasksScreen,
     AnalyticsScreen,
     SettingsScreen,
+    HelpSupportScreen,
+    StickiesScreen,
     LoginScreen,
     RegisterScreen,
 } from '../screens';
@@ -82,6 +84,16 @@ function MainApp() {
             }}
         >
             <Drawer.Screen name="MainTabs" component={MainTabs} />
+            <Drawer.Screen
+                name="HelpSupport"
+                component={HelpSupportScreen}
+                options={{ headerShown: true, headerTitle: 'Help & Support' }}
+            />
+            <Drawer.Screen
+                name="Stickies"
+                component={StickiesScreen}
+                options={{ headerShown: true, headerTitle: '' }}
+            />
         </Drawer.Navigator>
     );
 }

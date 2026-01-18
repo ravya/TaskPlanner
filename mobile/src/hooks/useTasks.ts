@@ -64,33 +64,33 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
                         case 'today':
                             filtered = filtered.filter(t => {
                                 const taskDate = (t as any).dueDate || (t as any).startDate;
-                                return taskDate === todayStr && !t.isDeleted;
+                                return taskDate === todayStr;
                             });
                             break;
                         case 'weekly':
                             filtered = filtered.filter(t => {
                                 const taskDate = (t as any).dueDate || (t as any).startDate;
-                                return taskDate >= todayStr && taskDate <= nextWeekStr && !t.isDeleted;
+                                return taskDate >= todayStr && taskDate <= nextWeekStr;
                             });
                             break;
                         case 'upcoming':
                             filtered = filtered.filter(t => {
                                 const taskDate = (t as any).dueDate || (t as any).startDate;
-                                return taskDate > todayStr && !t.isDeleted;
+                                return taskDate > todayStr && taskDate <= nextWeekStr;
                             });
                             break;
                         case 'recurring':
-                            filtered = filtered.filter(t => t.isRepeating && !t.isDeleted);
+                            filtered = filtered.filter(t => t.isRepeating);
                             break;
                         case 'completed':
-                            filtered = filtered.filter(t => t.completed && !t.isDeleted);
+                            filtered = filtered.filter(t => t.completed);
                             break;
                         case 'trash':
                             filtered = filtered.filter(t => t.isDeleted === true);
                             break;
                         case 'project':
                             if (options.projectId) {
-                                filtered = filtered.filter(t => t.projectId === options.projectId && !t.isDeleted);
+                                filtered = filtered.filter(t => t.projectId === options.projectId);
                             }
                             break;
                     }
@@ -105,10 +105,16 @@ export function useTasks(userId: string | undefined, options?: UseTasksOptions) 
                     if (options?.projectId) {
                         filtered = filtered.filter((t) => t.projectId === options.projectId);
                     }
+                }
+
+                // Apply global filters EXCEPT for specific cases
+                if (options?.filterType !== 'completed' && options?.filterType !== 'trash') {
                     if (!options?.includeCompleted) {
                         filtered = filtered.filter((t) => !t.completed);
                     }
-                    // Filter out deleted by default
+                }
+
+                if (options?.filterType !== 'trash') {
                     filtered = filtered.filter(t => !t.isDeleted);
                 }
 

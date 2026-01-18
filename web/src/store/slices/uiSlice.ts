@@ -35,64 +35,70 @@ export interface UIState {
   // Theme
   theme: Theme;
   isDarkMode: boolean;
-  
+
   // Layout
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
-  
+
   // Modals
   modal: ModalState;
-  
+
   // Notifications/Toasts
   notifications: UINotification[];
-  
+
   // Loading states
   loading: LoadingState;
-  
+
   // Search
   searchQuery: string;
   searchFocused: boolean;
-  
+
   // Filters and sorting
   activeFilters: Record<string, any>;
   sortBy: string;
   sortOrder: 'asc' | 'desc';
-  
+
   // Pagination
   currentPage: number;
   itemsPerPage: number;
-  
+
+  // Preferences
+  startOfWeek: 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
+  defaultMode: 'personal' | 'professional';
+
   // Actions
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setDarkMode: (isDark: boolean) => void;
-  
+  setStartOfWeek: (startOfWeek: 'Sunday' | 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday') => void;
+  setDefaultMode: (defaultMode: 'personal' | 'professional') => void;
+
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebarCollapsed: () => void;
-  
+
   openModal: (type: string, props?: Record<string, any>) => void;
   closeModal: () => void;
-  
+
   addNotification: (notification: Omit<UINotification, 'id' | 'createdAt'>) => void;
   removeNotification: (id: string) => void;
   clearNotifications: () => void;
-  
+
   setLoading: (key: string, loading: boolean) => void;
   clearLoading: () => void;
-  
+
   setSearchQuery: (query: string) => void;
   setSearchFocused: (focused: boolean) => void;
   clearSearch: () => void;
-  
+
   setFilters: (filters: Record<string, any>) => void;
   updateFilter: (key: string, value: any) => void;
   removeFilter: (key: string) => void;
   clearFilters: () => void;
-  
+
   setSorting: (sortBy: string, sortOrder?: 'asc' | 'desc') => void;
-  
+
   setCurrentPage: (page: number) => void;
   setItemsPerPage: (items: number) => void;
   resetPagination: () => void;
@@ -130,34 +136,37 @@ export const useUIStore = create<UIState>()(
       // Initial state
       theme: 'system',
       isDarkMode: calculateDarkMode('system'),
-      
+
       sidebarOpen: false,
       sidebarCollapsed: false,
-      
+
       modal: {
         isOpen: false,
         type: null,
         props: undefined,
       },
-      
+
       notifications: [],
       loading: {},
-      
+
       searchQuery: '',
       searchFocused: false,
-      
+
       activeFilters: {},
       sortBy: 'updatedAt',
       sortOrder: 'desc',
-      
+
       currentPage: 1,
       itemsPerPage: 20,
+
+      startOfWeek: 'Sunday',
+      defaultMode: 'personal',
 
       // Theme actions
       setTheme: (theme) => {
         const isDarkMode = calculateDarkMode(theme);
-        set({ theme, isDarkMode });
-        
+        set({ theme, isDarkMode } as Partial<UIState>);
+
         // Update document class for CSS
         if (typeof document !== 'undefined') {
           document.documentElement.classList.toggle('dark', isDarkMode);
@@ -167,7 +176,7 @@ export const useUIStore = create<UIState>()(
       toggleTheme: () => {
         const currentTheme = get().theme;
         let newTheme: Theme;
-        
+
         switch (currentTheme) {
           case 'light':
             newTheme = 'dark';
@@ -181,22 +190,30 @@ export const useUIStore = create<UIState>()(
           default:
             newTheme = 'light';
         }
-        
+
         get().setTheme(newTheme);
       },
 
       setDarkMode: (isDark) => {
-        set({ isDarkMode: isDark });
-        
+        set({ isDarkMode: isDark } as Partial<UIState>);
+
         // Update document class for CSS
         if (typeof document !== 'undefined') {
           document.documentElement.classList.toggle('dark', isDark);
         }
       },
 
+      setStartOfWeek: (startOfWeek) => {
+        set({ startOfWeek } as Partial<UIState>);
+      },
+
+      setDefaultMode: (defaultMode) => {
+        set({ defaultMode } as Partial<UIState>);
+      },
+
       // Layout actions
       setSidebarOpen: (open) => {
-        set({ sidebarOpen: open });
+        set({ sidebarOpen: open } as Partial<UIState>);
       },
 
       toggleSidebar: () => {
@@ -204,7 +221,7 @@ export const useUIStore = create<UIState>()(
       },
 
       setSidebarCollapsed: (collapsed) => {
-        set({ sidebarCollapsed: collapsed });
+        set({ sidebarCollapsed: collapsed } as Partial<UIState>);
       },
 
       toggleSidebarCollapsed: () => {
@@ -219,7 +236,7 @@ export const useUIStore = create<UIState>()(
             type,
             props,
           },
-        });
+        } as Partial<UIState>);
       },
 
       closeModal: () => {
@@ -229,7 +246,7 @@ export const useUIStore = create<UIState>()(
             type: null,
             props: undefined,
           },
-        });
+        } as Partial<UIState>);
       },
 
       // Notification actions
@@ -239,7 +256,7 @@ export const useUIStore = create<UIState>()(
           id: generateNotificationId(),
           createdAt: new Date(),
         };
-        
+
         set((state) => ({
           notifications: [...state.notifications, newNotification],
         }));
@@ -260,7 +277,7 @@ export const useUIStore = create<UIState>()(
       },
 
       clearNotifications: () => {
-        set({ notifications: [] });
+        set({ notifications: [] } as Partial<UIState>);
       },
 
       // Loading actions
@@ -271,25 +288,25 @@ export const useUIStore = create<UIState>()(
       },
 
       clearLoading: () => {
-        set({ loading: {} });
+        set({ loading: {} } as Partial<UIState>);
       },
 
       // Search actions
       setSearchQuery: (query) => {
-        set({ searchQuery: query, currentPage: 1 }); // Reset pagination on search
+        set({ searchQuery: query, currentPage: 1 } as Partial<UIState>); // Reset pagination on search
       },
 
       setSearchFocused: (focused) => {
-        set({ searchFocused: focused });
+        set({ searchFocused: focused } as Partial<UIState>);
       },
 
       clearSearch: () => {
-        set({ searchQuery: '', searchFocused: false });
+        set({ searchQuery: '', searchFocused: false } as Partial<UIState>);
       },
 
       // Filter actions
       setFilters: (filters) => {
-        set({ activeFilters: filters, currentPage: 1 }); // Reset pagination on filter change
+        set({ activeFilters: filters, currentPage: 1 } as Partial<UIState>); // Reset pagination on filter change
       },
 
       updateFilter: (key, value) => {
@@ -306,30 +323,30 @@ export const useUIStore = create<UIState>()(
           return {
             activeFilters: newFilters,
             currentPage: 1,
-          };
+          } as Partial<UIState>;
         });
       },
 
       clearFilters: () => {
-        set({ activeFilters: {}, currentPage: 1 });
+        set({ activeFilters: {}, currentPage: 1 } as Partial<UIState>);
       },
 
       // Sorting actions
       setSorting: (sortBy, sortOrder = 'desc') => {
-        set({ sortBy, sortOrder, currentPage: 1 }); // Reset pagination on sort change
+        set({ sortBy, sortOrder, currentPage: 1 } as Partial<UIState>); // Reset pagination on sort change
       },
 
       // Pagination actions
       setCurrentPage: (page) => {
-        set({ currentPage: page });
+        set({ currentPage: page } as Partial<UIState>);
       },
 
       setItemsPerPage: (items) => {
-        set({ itemsPerPage: items, currentPage: 1 });
+        set({ itemsPerPage: items, currentPage: 1 } as Partial<UIState>);
       },
 
       resetPagination: () => {
-        set({ currentPage: 1 });
+        set({ currentPage: 1 } as Partial<UIState>);
       },
     }),
     {
@@ -342,6 +359,8 @@ export const useUIStore = create<UIState>()(
         sortBy: state.sortBy,
         sortOrder: state.sortOrder,
         itemsPerPage: state.itemsPerPage,
+        startOfWeek: state.startOfWeek,
+        defaultMode: state.defaultMode,
       }),
       // Handle rehydration
       onRehydrateStorage: () => (state) => {
@@ -358,7 +377,7 @@ export const useUIStore = create<UIState>()(
 // Listen for system theme changes
 if (typeof window !== 'undefined') {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  
+
   mediaQuery.addEventListener('change', (e) => {
     const store = useUIStore.getState();
     if (store.theme === 'system') {
@@ -379,8 +398,10 @@ export const uiSelectors = {
   hasActiveFilters: (state: UIState) => Object.keys(state.activeFilters).length > 0,
   searchQuery: (state: UIState) => state.searchQuery,
   sorting: (state: UIState) => ({ sortBy: state.sortBy, sortOrder: state.sortOrder }),
-  pagination: (state: UIState) => ({ 
-    currentPage: state.currentPage, 
-    itemsPerPage: state.itemsPerPage 
+  pagination: (state: UIState) => ({
+    currentPage: state.currentPage,
+    itemsPerPage: state.itemsPerPage
   }),
+  startOfWeek: (state: UIState) => state.startOfWeek,
+  defaultMode: (state: UIState) => state.defaultMode,
 };

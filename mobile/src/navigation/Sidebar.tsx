@@ -15,7 +15,7 @@ import { AddProjectModal } from '../screens/ProjectsScreen';
 
 const LIST_ITEMS = [
     { id: 'today', label: "Today's Tasks", icon: 'today-outline' as const },
-    { id: 'weekly', label: "Weekly Tasks", icon: 'calendar-outline' as const },
+    { id: 'stickies', label: "Sticky Notes", icon: 'copy-outline' as const, screen: 'Stickies' },
     { id: 'upcoming', label: "Upcoming", icon: 'notifications-outline' as const },
     { id: 'recurring', label: "Recurring", icon: 'repeat-outline' as const },
 ];
@@ -23,6 +23,11 @@ const LIST_ITEMS = [
 const ARCHIVE_ITEMS = [
     { id: 'completed', label: "Completed", icon: 'checkmark-circle-outline' as const },
     { id: 'trash', label: "Trash", icon: 'trash-outline' as const },
+];
+
+const OTHER_ITEMS = [
+    { id: 'help', label: "Help & Support", icon: 'help-circle-outline' as const, screen: 'HelpSupport' },
+    { id: 'settings', label: "Settings", icon: 'settings-outline' as const, screen: 'Settings' },
 ];
 
 export function Sidebar(props: DrawerContentComponentProps) {
@@ -48,7 +53,13 @@ export function Sidebar(props: DrawerContentComponentProps) {
                         <TouchableOpacity
                             key={item.id}
                             style={styles.item}
-                            onPress={() => navigateToFilter(item.id, undefined, item.label)}
+                            onPress={() => {
+                                if ((item as any).screen) {
+                                    props.navigation.navigate((item as any).screen);
+                                } else {
+                                    navigateToFilter(item.id, undefined, item.label);
+                                }
+                            }}
                         >
                             <Ionicons name={item.icon} size={22} color={colors.textSecondary} />
                             <Text style={styles.itemLabel}>{item.label}</Text>
@@ -94,12 +105,35 @@ export function Sidebar(props: DrawerContentComponentProps) {
                         </TouchableOpacity>
                     ))}
                 </View>
+
+                <View style={styles.divider} />
+
+                {/* Other Section */}
+                <View style={styles.section}>
+                    {OTHER_ITEMS.map((item) => (
+                        <TouchableOpacity
+                            key={item.id}
+                            style={styles.item}
+                            onPress={() => {
+                                if (item.screen === 'HelpSupport') {
+                                    props.navigation.navigate('HelpSupport');
+                                } else if (item.screen === 'Settings') {
+                                    props.navigation.navigate('MainTabs', { screen: 'Settings' });
+                                }
+                            }}
+                        >
+                            <Ionicons name={item.icon} size={22} color={colors.textSecondary} />
+                            <Text style={styles.itemLabel}>{item.label}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
             </ScrollView>
 
             <AddProjectModal
                 visible={showAddProject}
                 onClose={() => setShowAddProject(false)}
                 userId={user?.uid}
+                projects={projects}
             />
         </SafeAreaView>
     );

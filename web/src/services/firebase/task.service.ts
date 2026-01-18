@@ -22,12 +22,13 @@ import {
   QueryDocumentSnapshot,
   getCountFromServer,
 } from 'firebase/firestore';
-import { db } from './config';
+import { db, auth } from './config';
 import {
   TaskStatus,
   TaskPriority,
   TaskSortField,
   TaskMode,
+  TASK_LIMITS,
 } from '../../types/task';
 import type {
   Task,
@@ -90,6 +91,30 @@ class TaskService {
   async createTask(userId: string, taskData: CreateTaskInput): Promise<Task> {
     try {
       const tasksRef = this.getUserTasksRef(userId);
+
+      // Check verification status for limits
+      const currentUser = auth.currentUser;
+      const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+      const isVerified = currentUser?.emailVerified || isGoogleUser;
+
+      if (!isVerified) {
+        // Enforce task limit
+        const stats = await this.getTaskStatistics(userId);
+        if (stats.total >= TASK_LIMITS.MAX_TASKS_UNVERIFIED) {
+          throw new TaskServiceError(
+            `Unverified accounts are limited to ${TASK_LIMITS.MAX_TASKS_UNVERIFIED} tasks. Please verify your email to create more.`,
+            'TASK_LIMIT_EXCEEDED'
+          );
+        }
+
+        // Disable recurring tasks for unverified
+        if (taskData.isRepeating) {
+          throw new TaskServiceError(
+            'Recurring tasks are a premium feature available to verified accounts. Please verify your email to use this feature.',
+            'VERIFICATION_REQUIRED'
+          );
+        }
+      }
 
       const now = new Date().toISOString();
       const newTask: Omit<Task, 'id'> = {

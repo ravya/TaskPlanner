@@ -32,6 +32,9 @@ export interface Task {
   listId?: string;
   mode: TaskMode; // personal or professional
   projectId?: string; // project this task belongs to
+  isRepeating?: boolean;
+  repeatFrequency?: 'daily' | 'weekly' | 'monthly';
+  repeatEndDate?: string;
 }
 
 // Task status enum
@@ -60,6 +63,11 @@ export enum TaskMode {
   PERSONAL = 'personal',
   PROFESSIONAL = 'professional',
 }
+
+// Configurable limits
+export const TASK_LIMITS = {
+  MAX_TASKS_UNVERIFIED: 20,
+} as const;
 
 // Subtask interface
 export interface Subtask {
@@ -206,6 +214,9 @@ export interface TaskFormData {
   customFields?: Record<string, any>;
   mode?: TaskMode;
   projectId?: string;
+  isRepeating?: boolean;
+  repeatFrequency?: 'daily' | 'weekly' | 'monthly';
+  repeatEndDate?: string;
 }
 
 // Task update data
@@ -224,6 +235,9 @@ export interface TaskUpdateData {
   labels?: string[];
   customFields?: Record<string, any>;
   projectId?: string;
+  isRepeating?: boolean;
+  repeatFrequency?: 'daily' | 'weekly' | 'monthly';
+  repeatEndDate?: string;
 }
 
 // Task filters

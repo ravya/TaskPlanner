@@ -6,6 +6,7 @@ import {
     User as FirebaseUser,
     updateProfile,
 } from 'firebase/auth';
+
 import { auth } from './config';
 import { User } from '../../types';
 
@@ -87,5 +88,6 @@ function mapFirebaseUser(firebaseUser: FirebaseUser): User {
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
         photoURL: firebaseUser.photoURL,
+        emailVerified: firebaseUser.emailVerified,
     };
 }

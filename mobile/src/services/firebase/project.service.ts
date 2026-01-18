@@ -11,8 +11,8 @@ import {
     onSnapshot,
     increment,
 } from 'firebase/firestore';
-import { db } from './config';
-import { Project, ProjectFormData, ProjectMode } from '../../types';
+import { db, auth } from './config';
+import { Project, ProjectFormData, ProjectMode, PROJECT_LIMITS } from '../../types';
 
 const PROJECTS_COLLECTION = 'projects';
 
@@ -62,6 +62,19 @@ export async function createProject(
         isDeleted: false,
         isDefault: false,
     };
+
+    // Check verification status for limits
+    const currentUser = auth.currentUser;
+    const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+    const isVerified = currentUser?.emailVerified || isGoogleUser;
+
+    if (!isVerified) {
+        // Enforce project limit (3 per mode)
+        const projects = await getProjects(userId, data.mode);
+        if (projects.filter(p => !p.isDeleted).length >= PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED) {
+            throw new Error(`Unverified accounts are limited to ${PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED} projects per mode. Please verify your email to create more.`);
+        }
+    }
 
     const docRef = await addDoc(projectsRef, projectData);
     return { id: docRef.id, ...projectData } as Project;

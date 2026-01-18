@@ -2,6 +2,8 @@ import React from 'react';
 import { clsx } from 'clsx';
 import { useUIStore } from '../../../store/slices/uiSlice';
 import { useAuthStore } from '../../../store/slices/authSlice';
+import { useNavigate, Link } from 'react-router-dom';
+import { getAuth } from 'firebase/auth';
 import Button from '../../ui/Button';
 import Avatar from '../../ui/Avatar';
 import Dropdown, { DropdownItem } from '../../ui/Dropdown';
@@ -27,10 +29,14 @@ export const Header: React.FC<HeaderProps> = ({
     searchQuery,
     setSearchQuery,
     searchFocused,
-    setSearchFocused
+    setSearchFocused,
+    notifications,
+    clearNotifications,
+    removeNotification
   } = useUIStore();
 
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   const userMenuItems: DropdownItem[] = [
     {
@@ -87,13 +93,16 @@ export const Header: React.FC<HeaderProps> = ({
   const handleUserMenuSelect = (item: DropdownItem) => {
     switch (item.value) {
       case 'profile':
-        // Navigate to profile
+        navigate('/settings');
         break;
       case 'settings':
-        // Navigate to settings
+        navigate('/settings');
         break;
       case 'logout':
-        // Handle logout
+        getAuth().signOut().then(() => {
+          logout();
+          navigate('/login');
+        });
         break;
     }
   };
@@ -122,11 +131,11 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Logo */}
-        <div className="flex items-center">
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
           <h1 className="text-xl font-bold text-gray-900">
             TaskFlow
           </h1>
-        </div>
+        </Link>
       </div>
 
       {/* Center section - Search */}
@@ -169,19 +178,45 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center space-x-4">
         {/* Notifications */}
         {showNotifications && (
-          <Button
-            variant="ghost"
-            size="md"
-            className="relative"
-            aria-label="Notifications"
+          <Dropdown
+            items={notifications.length > 0 ? [
+              ...notifications.map(n => ({
+                id: n.id,
+                label: n.title,
+                value: n.id,
+                icon: (
+                  <div className={clsx(
+                    "w-2 h-2 rounded-full",
+                    n.type === 'success' ? "bg-green-500" :
+                      n.type === 'error' ? "bg-red-500" :
+                        n.type === 'warning' ? "bg-yellow-500" : "bg-blue-500"
+                  )} />
+                )
+              })),
+              { id: 'divider', label: '', value: 'divider', divider: true },
+              { id: 'clear', label: 'Clear All', value: 'clear', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> }
+            ] : [{ id: 'none', label: 'No new notifications', value: 'none', disabled: true }]}
+            onSelect={(item) => {
+              if (item.value === 'clear') {
+                clearNotifications();
+              } else if (item.value !== 'divider' && item.value !== 'none') {
+                removeNotification(item.value);
+              }
+            }}
+            placeholder="No notifications"
+            buttonClassName="relative p-2 rounded-lg hover:bg-gray-100 transition-colors border-none shadow-none"
+            menuClassName="w-80"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
 
-            {/* Notification badge */}
-            <span className="absolute -top-1 -right-1 h-3 w-3 bg-danger-500 rounded-full"></span>
-          </Button>
+            {notifications.length > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white border-2 border-white">
+                {notifications.length}
+              </span>
+            )}
+          </Dropdown>
         )}
 
         {/* User menu */}

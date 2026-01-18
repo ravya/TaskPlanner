@@ -2,6 +2,10 @@
 export type ProjectMode = 'home' | 'work';
 export type ProjectStatus = 'active' | 'completed' | 'archived';
 
+export const PROJECT_LIMITS = {
+    MAX_PROJECTS_UNVERIFIED: 3,
+} as const;
+
 export interface Project {
     id: string;
     name: string;

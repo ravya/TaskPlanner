@@ -21,7 +21,8 @@ import { useProjects, useAuth } from '../hooks';
 import { EmptyState, LoadingState } from '../components/EmptyState';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
 import { createProject, deleteProject, updateProject } from '../services/firebase';
-import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName, TaskLabel, DEFAULT_LABELS } from '../types';
+import { Project, ProjectMode, PROJECT_ICONS, getProjectIconName, TaskLabel, DEFAULT_LABELS, PROJECT_LIMITS } from '../types';
+import { auth } from '../services/firebase/config';
 
 export function ProjectsScreen() {
     const insets = useSafeAreaInsets();
@@ -131,6 +132,7 @@ export function ProjectsScreen() {
                 visible={showAddModal}
                 onClose={() => setShowAddModal(false)}
                 userId={user?.uid}
+                projects={projects}
             />
 
             {editingProject && (
@@ -211,10 +213,12 @@ export function AddProjectModal({
     visible,
     onClose,
     userId,
+    projects,
 }: {
     visible: boolean;
     onClose: () => void;
     userId?: string;
+    projects: Project[];
 }) {
     const [name, setName] = useState('');
     const [mode, setMode] = useState<ProjectMode>('home');
@@ -225,6 +229,13 @@ export function AddProjectModal({
     // Pickers
     const [activeSection, setActiveSection] = useState<'mode' | 'deadline' | 'label' | 'icon' | null>(null);
     const [loading, setLoading] = useState(false);
+
+    const currentUser = auth.currentUser;
+    const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+    const isVerified = currentUser?.emailVerified || isGoogleUser;
+
+    const countInCurrentMode = projects.filter(p => !p.isDeleted && p.mode === mode).length;
+    const isLimitReached = !isVerified && countInCurrentMode >= PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED;
 
     const handleClose = () => {
         setName('');
@@ -275,6 +286,34 @@ export function AddProjectModal({
                             onChangeText={setName}
                             autoFocus
                         />
+
+                        {!isVerified && (
+                            <View style={[
+                                modalStyles.restrictionBanner,
+                                isLimitReached ? modalStyles.limitReachedBanner : modalStyles.infoBanner
+                            ]}>
+                                <Ionicons
+                                    name={isLimitReached ? "warning" : "information-circle"}
+                                    size={18}
+                                    color={isLimitReached ? colors.error : colors.primary}
+                                />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[
+                                        modalStyles.restrictionText,
+                                        isLimitReached ? modalStyles.limitReachedText : modalStyles.infoText
+                                    ]}>
+                                        {isLimitReached
+                                            ? `${mode === 'home' ? 'Home' : 'Work'} limit reached (${countInCurrentMode}/${PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED})`
+                                            : `Account limit: ${countInCurrentMode}/${PROJECT_LIMITS.MAX_PROJECTS_UNVERIFIED} ${mode === 'home' ? 'Home' : 'Work'} projects`}
+                                    </Text>
+                                    <Text style={modalStyles.restrictionSubtext}>
+                                        {isLimitReached
+                                            ? 'Please verify your email to create more.'
+                                            : 'Verify your email to remove this limit.'}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
 
                         {/* Icon toolbar */}
                         <View style={modalStyles.toolbar}>
@@ -394,11 +433,13 @@ export function AddProjectModal({
                             <Text style={[modalStyles.cancelButtonText, { color: colors.textInverse, fontWeight: '600' }]}>Cancel</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[modalStyles.submitButton, (!name.trim() || loading) && modalStyles.buttonDisabled]}
+                            style={[modalStyles.submitButton, (!name.trim() || loading || isLimitReached) && modalStyles.buttonDisabled]}
                             onPress={handleSubmit}
-                            disabled={!name.trim() || loading}
+                            disabled={!name.trim() || loading || isLimitReached}
                         >
-                            <Text style={modalStyles.submitButtonText}>{loading ? 'Creating...' : 'Create'}</Text>
+                            <Text style={modalStyles.submitButtonText}>
+                                {loading ? 'Creating...' : isLimitReached ? 'Limit Reached' : 'Create'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -913,6 +954,35 @@ const modalStyles = StyleSheet.create({
         fontSize: fontSizes.body,
         color: colors.textInverse,
         fontWeight: '600' as const,
+    },
+    restrictionBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
+        borderRadius: borderRadius.md,
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    infoBanner: {
+        backgroundColor: colors.primary + '10',
+    },
+    limitReachedBanner: {
+        backgroundColor: colors.error + '10',
+    },
+    restrictionText: {
+        fontSize: fontSizes.bodySmall,
+        fontWeight: '600',
+    },
+    infoText: {
+        color: colors.primary,
+    },
+    limitReachedText: {
+        color: colors.error,
+    },
+    restrictionSubtext: {
+        fontSize: 11,
+        color: colors.textSecondary,
+        marginTop: 2,
     },
     buttonDisabled: {
         opacity: 0.5,

@@ -14,8 +14,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, spacing, fontSizes, borderRadius } from '../styles/theme';
-import { createTask } from '../services/firebase';
-import { TaskMode, TaskLabel, DEFAULT_LABELS, Subtask, Project } from '../types';
+import { createTask, subscribeToTasks } from '../services/firebase';
+import { TaskMode, TaskLabel, DEFAULT_LABELS, Subtask, Project, TASK_LIMITS } from '../types';
+import { auth } from '../services/firebase/config';
 
 interface AddTaskModalProps {
     visible: boolean;
@@ -54,6 +55,12 @@ export function AddTaskModal({
     const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
     const [showRepeatEndDatePicker, setShowRepeatEndDatePicker] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [taskCount, setTaskCount] = useState(0);
+
+    const currentUser = auth.currentUser;
+    const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+    const isVerified = currentUser?.emailVerified || isGoogleUser;
+    const isLimitReached = !isVerified && taskCount >= TASK_LIMITS.MAX_TASKS_UNVERIFIED;
 
     useEffect(() => {
         if (visible) {
@@ -61,6 +68,15 @@ export function AddTaskModal({
             setSelectedProjectId(initialProjectId || null);
         }
     }, [visible, defaultMode, initialProjectId]);
+
+    useEffect(() => {
+        if (userId && visible) {
+            return subscribeToTasks(userId, (tasks) => {
+                const activeTasks = tasks.filter(t => !t.completed && !t.isDeleted);
+                setTaskCount(activeTasks.length);
+            });
+        }
+    }, [userId, visible]);
 
     const handleSubmit = async () => {
         if (!userId || !title.trim()) return;
@@ -154,7 +170,36 @@ export function AddTaskModal({
                             autoFocus
                             returnKeyType="done"
                             onSubmitEditing={handleSubmit}
+                            editable={!isLimitReached}
                         />
+
+                        {!isVerified && (
+                            <View style={[
+                                styles.restrictionBanner,
+                                isLimitReached ? styles.limitReachedBanner : styles.infoBanner
+                            ]}>
+                                <Ionicons
+                                    name={isLimitReached ? "warning" : "information-circle"}
+                                    size={18}
+                                    color={isLimitReached ? colors.error : colors.primary}
+                                />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[
+                                        styles.restrictionText,
+                                        isLimitReached ? styles.limitReachedText : styles.infoText
+                                    ]}>
+                                        {isLimitReached
+                                            ? `Task limit reached (${taskCount}/${TASK_LIMITS.MAX_TASKS_UNVERIFIED})`
+                                            : `Account limit: ${taskCount}/${TASK_LIMITS.MAX_TASKS_UNVERIFIED} active tasks`}
+                                    </Text>
+                                    <Text style={styles.restrictionSubtext}>
+                                        {isLimitReached
+                                            ? 'Please verify your email to create more tasks.'
+                                            : 'Verify your email to remove this limit.'}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
 
                         {/* Mode selection - Proper Home/Work toggle */}
                         <View style={styles.modeSection}>
@@ -374,7 +419,15 @@ export function AddTaskModal({
                                     ))}
                                 </View>
                                 {/* End date option - only show when repeating is set */}
-                                {isRepeating && (
+                                {!isVerified && (
+                                    <View style={styles.recurrenceLocked}>
+                                        <Ionicons name="lock-closed" size={14} color={colors.modeProfessional} />
+                                        <Text style={styles.recurrenceLockedText}>
+                                            Verify email to unlock recurring tasks
+                                        </Text>
+                                    </View>
+                                )}
+                                {isRepeating && isVerified && (
                                     <View style={styles.endDateRow}>
                                         <TouchableOpacity
                                             style={styles.endDateButton}
@@ -467,19 +520,9 @@ export function AddTaskModal({
                                     textColor={colors.textPrimary}
                                 />
                                 {Platform.OS === 'ios' && (
-                                    <View style={styles.pickerActions}>
-                                        <TouchableOpacity onPress={() => {
-                                            if (pickerMode === 'date') setDueDate(null);
-                                            else if (pickerMode === 'deadline') setDeadlineDate(null);
-                                            else setStartTime(null);
-                                            setShowDatePicker(false);
-                                        }}>
-                                            <Text style={styles.pickerClear}>Clear</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                            <Text style={styles.pickerDone}>Done</Text>
-                                        </TouchableOpacity>
-                                    </View>
+                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                        <Text style={styles.pickerDone}>Done</Text>
+                                    </TouchableOpacity>
                                 )}
                             </View>
                         )}
@@ -490,17 +533,19 @@ export function AddTaskModal({
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                style={[styles.submitButton, (!title.trim() || loading) && styles.submitDisabled]}
+                                style={[styles.submitButton, (!title.trim() || loading || isLimitReached) && styles.submitDisabled]}
                                 onPress={handleSubmit}
-                                disabled={!title.trim() || loading}
+                                disabled={!title.trim() || loading || isLimitReached}
                             >
-                                <Text style={styles.submitText}>{loading ? 'Creating...' : 'Create'}</Text>
+                                <Text style={styles.submitText}>
+                                    {loading ? 'Creating...' : isLimitReached ? 'Limit Reached' : 'Create'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
                 </View>
-            </KeyboardAvoidingView>
-        </Modal>
+            </KeyboardAvoidingView >
+        </Modal >
     );
 }
 
@@ -765,5 +810,48 @@ const styles = StyleSheet.create({
     endDateText: {
         fontSize: fontSizes.bodySmall,
         color: colors.textSecondary,
+    },
+    restrictionBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
+        borderRadius: borderRadius.md,
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    infoBanner: {
+        backgroundColor: colors.primary + '10',
+    },
+    limitReachedBanner: {
+        backgroundColor: colors.error + '10',
+    },
+    restrictionText: {
+        fontSize: fontSizes.bodySmall,
+        fontWeight: '600',
+    },
+    infoText: {
+        color: colors.primary,
+    },
+    limitReachedText: {
+        color: colors.error,
+    },
+    restrictionSubtext: {
+        fontSize: 11,
+        color: colors.textSecondary,
+        marginTop: 2,
+    },
+    recurrenceLocked: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surfaceSecondary,
+        padding: spacing.sm,
+        borderRadius: borderRadius.sm,
+        marginTop: spacing.sm,
+        gap: spacing.xs,
+    },
+    recurrenceLockedText: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        fontWeight: '500',
     },
 });

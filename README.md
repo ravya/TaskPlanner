@@ -71,10 +71,12 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - ✅ Create, edit, and delete tasks
 - ✅ Task title and description
 - ✅ Set due date and time
+- ✅ **New**: Set task deadlines for better planning
 - ✅ Mark tasks as complete/incomplete
 - ✅ Add subtasks to tasks
 - ✅ Set reminders for tasks
 - ✅ Recurring tasks (daily, weekly, monthly)
+- ✅ Consolidated task toolbar for quick access to all options
 - ✅ Drag & drop to reorder tasks and subtasks
 
 ### 2. Labels
@@ -86,23 +88,24 @@ TaskPlanner is a modern productivity application designed to help individuals an
 ### 3. Projects
 - 📁 Create and manage projects
 - 📁 Assign tasks to projects
+- 📁 Integrated project management in Sidebar
 - 📁 View project progress
-- 📁 Mark project as done
 - 📁 Edit and delete projects
-- 📁 Group tasks by project in widget
+- 📁 Group tasks by project (including a "No Project" section)
 
-### 4. Home/Work Mode
-- 🏠 Toggle between Home and Work modes
+### 4. Mode Selection (Home/Work)
+- 🏠 **Three-State Toggle**: Choose between "Home Mode", "None" (both), or "Work Mode"
+- 🏠 "None" mode stays in the center for quick switching between personal and professional contexts
+- 🏠 Integrated mode icons for visual clarity
 - 🏠 View tasks for a selected mode or both modes together
 - 🏠 Option to disable mode filtering in settings
-- 🏠 Dropdown/toggle for quick mode switching
 
-### 5. Multi-Select & Bulk Actions
-- ☑️ Long-press to select multiple tasks
-- ☑️ Bulk mark as complete
-- ☑️ Bulk delete
-- ☑️ Bulk change labels
-- ☑️ Bulk move to a different date
+### 5. Navigation & Lists
+- 🧭 Sidebar renamed to **Task Planner** for better identity
+- 🧭 **Today's Tasks**: Quick overview of current tasks (Active tasks shown by default)
+- 🧭 **Upcoming**: Redesigned view with grouped dates and large headers (Next 7 days by default)
+- 🧭 **Recurring**: Manage habit and repeating tasks
+- 🧭 Bottom tab navigation for major app sections (Dashboard, Tasks, Analytics, Settings)
 
 ### 6. Search & Filter
 - 🔍 Search tasks by text
@@ -124,10 +127,10 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - 📌 Available on both web and mobile
 - 📌 Quick task overview at a glance
 
-### 9. Authentication
-- 🔐 Email/password login
-- 🔐 Google Sign-in
-- 🔐 User registration
+### 9. Authentication & Verification
+- 🔐 Email/password login with verification enforcement
+- 🔐 Google Sign-in with automatic verification bypass
+- 🔐 User registration with account growth protections
 - 🔐 Auto-login with session persistence
 - 🔐 Secure logout
 
@@ -143,12 +146,16 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - 🔔 Notification settings toggle
 - 🔔 Customizable notification preferences
 
-### 12. Settings
-- ⚙️ User preferences
-- ⚙️ Sound toggles (mobile)
-- ⚙️ Notification preferences
-- ⚙️ Option to ignore modes
-- ⚙️ Theme customization
+### 12. Customization (Coming Soon)
+- 🌓 Dark Mode theme support
+- 🎨 Custom color palettes
+- 🧩 Third-party integrations
+
+### 13. Safety & Restrictions (Unverified Accounts)
+- 🛡️ **Project Limits**: Unverified users are limited to 3 projects per mode
+- 🛡️ **Task Limits**: Unverified users are limited to 20 active tasks
+- 🛡️ **Feature Restriction**: Task recurrence is disabled for unverified accounts
+- 🛡️ **Experience**: Verification banners guide unverified users to full access
 
 ---
 
@@ -195,7 +202,8 @@ TaskPlanner/
 │   │   │   ├── AnalyticsScreen.tsx
 │   │   │   └── SettingsScreen.tsx
 │   │   ├── navigation/          # Navigation setup
-│   │   │   └── AppNavigator.tsx
+│   │   │   ├── AppNavigator.tsx
+│   │   │   └── Sidebar.tsx         # Custom drawer content
 │   │   ├── services/            # Services
 │   │   │   └── firebase/       # Firebase integration
 │   │   ├── hooks/               # Custom hooks

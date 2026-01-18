@@ -10,8 +10,8 @@ import {
     writeBatch,
     getDoc,
 } from 'firebase/firestore';
-import { db } from './config';
-import { Task, TaskFormData, TaskMode, TaskLabel } from '../../types';
+import { db, auth } from './config';
+import { Task, TaskFormData, TaskMode, TaskLabel, TASK_LIMITS } from '../../types';
 import { adjustProjectTaskCounts } from './project.service';
 
 const TASKS_COLLECTION = 'tasks';
@@ -143,6 +143,24 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
         isDeleted: false,
     };
 
+    // Check verification status for limits
+    const currentUser = auth.currentUser;
+    const isGoogleUser = currentUser?.providerData.some((p: any) => p.providerId === 'google.com');
+    const isVerified = currentUser?.emailVerified || isGoogleUser;
+
+    if (!isVerified) {
+        // Enforce task limit
+        const tasks = await getTasks(userId, { includeCompleted: false });
+        if (tasks.filter(t => !t.isDeleted).length >= TASK_LIMITS.MAX_TASKS_UNVERIFIED) {
+            throw new Error(`Unverified accounts are limited to ${TASK_LIMITS.MAX_TASKS_UNVERIFIED} active tasks. Please verify your email to create more.`);
+        }
+
+        // Disable recurring tasks for unverified
+        if (taskData.isRepeating) {
+            throw new Error('Recurring tasks are available to verified accounts. Please verify your email to use this feature.');
+        }
+    }
+
     const docRef = await addDoc(tasksRef, taskData);
 
     // Update project count
@@ -262,6 +280,36 @@ export async function updateTaskPositions(
     });
 
     await batch.commit();
+}
+
+// Cleanup trash: permanently delete tasks that were deleted more than 10 days ago
+export async function cleanupTrash(userId: string): Promise<void> {
+    const tasksRef = getUserTasksRef(userId);
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    const tenDaysAgoISO = tenDaysAgo.toISOString();
+
+    // Query for tasks that are deleted and were last updated (deleted) before 10 days ago
+    const q = query(
+        tasksRef,
+        where('isDeleted', '==', true),
+        where('updatedAt', '<', tenDaysAgoISO)
+    );
+
+    try {
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return;
+
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+        console.log(`Cleaned up ${snapshot.size} old trash tasks`);
+    } catch (error) {
+        console.error('Error cleaning up trash:', error);
+    }
 }
 
 // Subscribe to tasks (real-time updates)

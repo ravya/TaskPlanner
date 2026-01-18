@@ -29,6 +29,7 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - ✅ Drag & drop to reorder tasks and subtasks
 - ✅ Set Deadline for a task
 - ✅ Set Label and project to task
+- ✅ Sleek and minimalistic design
 
 ### 2. Labels
 - 🏷️ Create custom labels with colors
@@ -50,6 +51,7 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - 🏠 View tasks for a selected mode or both modes together
 - 🏠 Option to disable mode filtering in settings
 - 🏠 Dropdown/toggle for quick mode switching
+- different ui for each mode, home, work, all
 
 ### 5. Multi-Select & Bulk Actions
 - ☑️ Long-press to select multiple tasks
@@ -102,8 +104,9 @@ TaskPlanner is a modern productivity application designed to help individuals an
 - ⚙️ User preferences
 - ⚙️ Sound toggles (mobile)
 - ⚙️ Notification preferences
-- ⚙️ Option to ignore modes
+- ⚙️ Option to ignore modes, set default mode
 - ⚙️ Theme customization
+- set start of week
 
 ### 13. Sidebar Panel
 - Side bar view of customised lists, projects and completed tasks.
